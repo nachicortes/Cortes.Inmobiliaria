@@ -43,3 +43,4 @@ with tab2:
                 else:
                     st.warning("Por favor, poné un nombre y elegí al menos una foto.")
 
+

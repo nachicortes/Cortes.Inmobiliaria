@@ -42,3 +42,4 @@ with tab2:
                             st.error(f"Fallo al subir {arc.name}: {e}")
                 else:
                     st.warning("Por favor, poné un nombre y elegí al menos una foto.")
+

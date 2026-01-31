@@ -1,4 +1,4 @@
-streamlit>=1.40.0
+streamlit
 pandas
-fpdf
-Pillow
+pydrive2
+oauth2client

@@ -6,6 +6,7 @@ from fpdf import FPDF
 import requests
 from io import BytesIO
 import qrcode
+import time
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Gestión Cortés Inmo", layout="wide")
@@ -19,22 +20,24 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. LOGO CENTRADO
+    # 1. LOGO DE LA INMOBILIARIA CENTRADO
     try:
-        url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
-        response = requests.get(url_logo)
-        with open("temp_logo.png", "wb") as f: f.write(response.content)
-        # Centrado: (210mm ancho A4 - 60mm ancho logo) / 2 = 75
-        pdf.image("temp_logo.png", x=75, y=10, w=60) 
+        url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
+        response = requests.get(url_logo, timeout=5)
+        if response.status_code == 200:
+            with open("temp_logo.png", "wb") as f:
+                f.write(response.content)
+            # Centrado en A4 (210mm ancho): (210 - 60) / 2 = 75
+            pdf.image("temp_logo.png", x=75, y=10, w=60)
     except:
         pdf.set_font("Arial", 'B', 16)
+        pdf.set_xy(10, 20)
         pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='C')
 
-    pdf.ln(45)
+    pdf.ln(40)
     
-    # 2. CUERPO (ESTILO NEGRO)
+    # 2. CUERPO DE LA FICHA (ESTILO NEGRO)
     pdf.set_text_color(0, 0, 0)
-    pdf.set_draw_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
@@ -49,7 +52,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
-    pdf.ln(15)
+    pdf.ln(10)
     
     # 3. QR A REDES
     pdf.set_font("Arial", 'B', 11)
@@ -58,36 +61,43 @@ def crear_pdf(titulo, precio, fecha, desc):
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 4. SECCIÓN CONTACTO (LOGOS CORREGIDOS)
+    # 4. SECCIÓN CONTACTO (ICONOS AJUSTADOS)
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
     pdf.ln(2)
 
-    def agregar_red(nombre_img, texto, y_off):
-        base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
+    def agregar_contacto(img_name, texto, y_pos):
+        # Intentamos obtener los iconos de tu GitHub con la ruta exacta
+        icon_url = f"https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/{img_name}"
         try:
-            r = requests.get(base_url + nombre_img)
+            r = requests.get(icon_url, timeout=5)
             if r.status_code == 200:
-                with open(f"temp_{nombre_img}", "wb") as f: f.write(r.content)
-                pdf.image(f"temp_{nombre_img}", x=10, y=y_off, w=6) # Tamaño icono
-            pdf.set_xy(18, y_off + 0.5)
+                with open(f"t_{img_name}", "wb") as f:
+                    f.write(r.content)
+                pdf.image(f"t_{img_name}", x=10, y=y_pos, w=5)
+            # Siempre escribimos el texto aunque falle la imagen
+            pdf.set_xy(17, y_pos + 0.5)
             pdf.set_font("Arial", '', 10)
             pdf.cell(0, 5, txt=texto, ln=True)
-        except: pass
+        except:
+            pdf.set_xy(17, y_pos + 0.5)
+            pdf.set_font("Arial", '', 10)
+            pdf.cell(0, 5, txt=texto, ln=True)
 
-    y_pos = pdf.get_y() + 2
-    agregar_red("ws.png", "WhatsApp: +54 9 351 308-3986", y_pos)
-    agregar_red("ig.png", "Instagram: @cortes.inmo", y_pos + 8)
-    agregar_red("tk.png", "TikTok: @cortes.inmobiliaria", y_pos + 16)
+    curr_y = pdf.get_y() + 2
+    agregar_contacto("ws.png", "WhatsApp: +54 9 351 308-3986", curr_y)
+    agregar_contacto("ig.png", "Instagram: @cortes.inmo", curr_y + 7)
+    agregar_contacto("tk.png", "TikTok: @cortes.inmobiliaria", curr_y + 14)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ (BOTONES VERDES) ---
+# --- INTERFAZ STREAMLIT ---
 st.markdown("""
     <style>
+    /* BOTÓN VERDE PROFESIONAL */
     div.stDownloadButton > button {
-        background-color: #2e7d32 !important;
+        background-color: #28a745 !important;
         color: white !important;
         border-radius: 10px;
         border: none;
@@ -96,21 +106,21 @@ st.markdown("""
         font-weight: bold;
     }
     div.stDownloadButton > button:hover {
-        background-color: #1b5e20 !important;
+        background-color: #218838 !important;
     }
-    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
 menu = st.sidebar.radio("MENÚ", ["📂 CARGAR", "🖼️ PORTFOLIO"])
 
 if menu == "📂 CARGAR":
-    st.title("📂 Nueva Propiedad")
-    with st.form("carga", clear_on_submit=True):
+    st.title("📂 Cargar Propiedad")
+    with st.form("form_carga", clear_on_submit=True):
         t = st.text_input("Título")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link Drive (Uso Interno)")
+        l = st.text_input("Link Drive")
         if st.form_submit_button("🚀 GUARDAR"):
             if t and p:
                 df_n = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 

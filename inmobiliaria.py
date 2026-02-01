@@ -55,3 +55,4 @@ if menu == "📂 Cargar":
 else:
     st.title("🏠 Galería")
     st.info("Sincronizando catálogo con Google Drive...")
+

@@ -74,3 +74,4 @@ else:
                         df_new = df[df['ID'] != row['ID']]
                         df_new.to_csv(DB_FILE, index=False)
                         st.rerun()
+

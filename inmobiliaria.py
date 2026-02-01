@@ -14,7 +14,7 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN PDF PROFESIONAL ---
+# --- FUNCIÓN PDF PROFESIONAL CORREGIDA ---
 def crear_pdf(titulo, precio, fecha, desc, link):
     pdf = FPDF()
     pdf.add_page()
@@ -24,7 +24,10 @@ def crear_pdf(titulo, precio, fecha, desc, link):
         url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
         response = requests.get(url_logo)
         logo_data = BytesIO(response.content)
-        pdf.image(logo_data, x=10, y=8, w=40) 
+        # Guardamos el logo temporalmente para evitar errores de lectura
+        with open("temp_logo.png", "wb") as f:
+            f.write(logo_data.getbuffer())
+        pdf.image("temp_logo.png", x=10, y=8, w=40) 
     except:
         pdf.set_font("Arial", 'B', 16)
         pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='R')
@@ -32,7 +35,7 @@ def crear_pdf(titulo, precio, fecha, desc, link):
     pdf.ln(25)
     
     # 2. CUERPO DE LA FICHA
-    pdf.set_draw_color(46, 125, 50) # Verde institucional
+    pdf.set_draw_color(46, 125, 50) 
     pdf.set_font("Arial", 'B', 18)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
@@ -59,35 +62,41 @@ def crear_pdf(titulo, precio, fecha, desc, link):
     pdf.set_font("Arial", 'U', 10)
     pdf.multi_cell(0, 8, txt=link)
     
-    # 4. CÓDIGO QR PARA WHATSAPP
-    pdf.set_y(-70)
-    # Generar QR dinámico
-    msg = f"Hola, me interesa la propiedad: {titulo}"
-    wa_link = f"https://wa.me/5493513083986?text={msg.replace(' ', '%20')}"
-    qr = qrcode.make(wa_link)
-    qr_buffer = BytesIO()
-    qr.save(qr_buffer, format="PNG")
-    pdf.image(qr_buffer, x=150, y=pdf.get_y(), w=40) # QR a la derecha
+    # 4. CÓDIGO QR (SOLUCIÓN AL ERROR ATTRIBUTEERROR)
+    try:
+        pdf.set_y(-70)
+        msg = f"Hola, me interesa la propiedad: {titulo}"
+        wa_link = f"https://wa.me/5493513083986?text={msg.replace(' ', '%20')}"
+        
+        qr = qrcode.QRCode(box_size=10, border=1)
+        qr.add_data(wa_link)
+        qr.make(fit=True)
+        img_qr = qr.make_image(fill_color="black", back_color="white")
+        
+        # Guardamos el QR físicamente antes de insertarlo
+        img_qr.save("temp_qr.png")
+        pdf.image("temp_qr.png", x=150, y=pdf.get_y(), w=40)
+    except:
+        pass # Si falla el QR, que igual genere el PDF
     
-    # 5. DATOS DE CONTACTO (Colores Redes)
+    # 5. DATOS DE CONTACTO
+    pdf.set_y(-60)
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="CONTACTO COMERCIAL:", ln=True)
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 6, txt="WhatsApp: +54 9 351 308-3986", ln=True)
-    
-    pdf.set_text_color(228, 64, 95) # Instagram Pink
+    pdf.set_text_color(228, 64, 95) 
     pdf.cell(0, 6, txt="Instagram: @cortes.inmo", ln=True)
-    
-    pdf.set_text_color(0, 0, 0) # TikTok Black
+    pdf.set_text_color(0, 0, 0) 
     pdf.cell(0, 6, txt="TikTok: @cortes.inmobiliaria", ln=True)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ APP ---
+# --- INTERFAZ ---
 st.markdown("""
     <style>
-    .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; border: none; }
+    .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; }
     .card { background-color: #ffffff; padding: 25px; border-radius: 20px; border: 1px solid #f0f0f0; margin-bottom: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
@@ -116,6 +125,8 @@ else:
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
                 st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><h3 style="color: #2e7d32;">USD {row["Precio"]}</h3></div>', unsafe_allow_html=True)
+                
+                # Generamos el PDF pasando los datos de la fila
                 pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'], row['LinkDrive'])
                 
                 c1, c2 = st.columns(2)

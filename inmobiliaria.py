@@ -32,9 +32,9 @@ def crear_pdf(titulo, precio, fecha, desc):
 
     pdf.ln(30)
     
-    # 2. CUERPO DE LA FICHA (AHORA EN NEGRO)
-    pdf.set_draw_color(0, 0, 0) # Línea Negra
-    pdf.set_text_color(0, 0, 0) # Texto Negro
+    # 2. CUERPO DE LA FICHA (ESTILO NEGRO)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
@@ -52,7 +52,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(15)
     
-    # 3. CÓDIGO QR A INSTAGRAM
+    # 3. CÓDIGO QR A INSTAGRAM (DRIVE PRIVADO)
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     
@@ -61,10 +61,10 @@ def crear_pdf(titulo, precio, fecha, desc):
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 4. SECCIÓN CONTACTO (SIMPLIFICADA)
+    # 4. SECCIÓN CONTACTO
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T') # Título simplificado
+    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
     pdf.ln(2)
 
     def agregar_contacto(icono_url, texto, y_pos):
@@ -73,15 +73,15 @@ def crear_pdf(titulo, precio, fecha, desc):
             if res.status_code == 200:
                 with open("temp_icon.png", "wb") as f: f.write(res.content)
                 pdf.image("temp_icon.png", x=10, y=y_pos, w=5)
-        except: pass
-        pdf.set_xy(17, y_pos+0.5)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", '', 10)
-        pdf.cell(0, 5, txt=texto, ln=True)
+            pdf.set_xy(17, y_pos+0.5)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", '', 10)
+            pdf.cell(0, 5, txt=texto, ln=True)
+        except:
+            pass
 
     base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
     
-    # IMPORTANTE: Subí ws.png, ig.png y tk.png a GitHub para que estos funcionen
     agregar_contacto(base_url+"ws.png", "WhatsApp: +54 9 351 308-3986", pdf.get_y()+2)
     agregar_contacto(base_url+"ig.png", "Instagram: @cortes.inmo", pdf.get_y()+2)
     agregar_contacto(base_url+"tk.png", "TikTok: @cortes.inmobiliaria", pdf.get_y()+2)
@@ -91,7 +91,7 @@ def crear_pdf(titulo, precio, fecha, desc):
 # --- INTERFAZ APP ---
 st.markdown("""
     <style>
-    .stDownloadButton>button { background-color: #1e1e1e !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; border: none; }
+    .stDownloadButton>button { background-color: #000000 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; border: none; }
     .card { background-color: #ffffff; padding: 25px; border-radius: 20px; border: 1px solid #f0f0f0; margin-bottom: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)

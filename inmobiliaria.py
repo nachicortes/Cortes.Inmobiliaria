@@ -24,7 +24,7 @@ def crear_pdf(titulo, precio, fecha, desc):
         res = requests.get(url_logo, timeout=10)
         if res.status_code == 200:
             with open("temp_logo.png", "wb") as f: f.write(res.content)
-            pdf.image("temp_logo.png", x=75, y=10, w=60) # Centrado (210-60)/2 = 75
+            pdf.image("temp_logo.png", x=75, y=10, w=60)
     except:
         pdf.set_font("Arial", 'B', 16)
         pdf.set_xy(10, 20)
@@ -32,9 +32,8 @@ def crear_pdf(titulo, precio, fecha, desc):
 
     pdf.ln(45)
     
-    # 2. CUERPO DE LA FICHA (NEGRO PROFESIONAL)
+    # 2. CUERPO DE LA FICHA
     pdf.set_text_color(0, 0, 0)
-    pdf.set_draw_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
@@ -49,16 +48,16 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
-    pdf.ln(10)
+    pdf.ln(15)
     
-    # 3. QR A INSTAGRAM
+    # 3. QR A REDES
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 4. SECCIÓN CONTACTO (ICONOS WEB DIRECTOS)
+    # 4. SECCIÓN CONTACTO
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
@@ -87,7 +86,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ (BOTONES VERDES Y ESTILO) ---
+# --- INTERFAZ WEB ---
 st.markdown("""
     <style>
     div.stDownloadButton > button {
@@ -96,30 +95,36 @@ st.markdown("""
         border-radius: 10px;
         font-weight: bold;
         width: 100%;
-        border: none;
         height: 3.5em;
+        border: none;
     }
     div.stDownloadButton > button:hover {
         background-color: #218838 !important;
     }
     .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
+    [data-testid="stSidebar"] { background-color: #f8f9fa; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ LATERAL ---
+# --- MENÚ LATERAL CON LOGO ---
 with st.sidebar:
-    st.title("🏡 CORTÉS INMO")
+    # Mostramos el logo en el menú
+    try:
+        st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
+    except:
+        st.title("🏡 CORTÉS INMO")
+    
+    st.divider()
     menu = st.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"])
     
     st.divider()
     st.subheader("Seguridad")
-    # BOTÓN DE COPIA DE SEGURIDAD
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "rb") as f:
             st.download_button(
                 label="💾 COPIA DE SEGURIDAD",
                 data=f,
-                file_name=f"Respaldo_Portfolio_{datetime.now().strftime('%d_%m_%Y')}.csv",
+                file_name=f"Respaldo_Inmo_{datetime.now().strftime('%d_%m_%Y')}.csv",
                 mime="text/csv"
             )
 
@@ -130,7 +135,7 @@ if menu == "📂 CARGAR":
         t = st.text_input("Título de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link de Drive (Confidencial)")
+        l = st.text_input("Link de Drive")
         if st.form_submit_button("🚀 GUARDAR"):
             if t and p:
                 df_n = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
@@ -143,13 +148,12 @@ else:
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
         if df.empty:
-            st.info("No hay propiedades cargadas.")
+            st.info("No hay propiedades.")
         else:
             for _, row in df.iloc[::-1].iterrows():
                 with st.container():
                     st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {row["Precio"]}</h4></div>', unsafe_allow_html=True)
                     pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                    
                     c1, c2, c3 = st.columns([2, 1, 1])
                     with c1:
                         st.download_button(label="📄 ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf")

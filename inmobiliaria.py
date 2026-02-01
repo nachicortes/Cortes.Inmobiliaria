@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime
 import os
 from fpdf import FPDF
+import requests
+from io import BytesIO
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Gestión Cortés Inmo", layout="wide")
@@ -12,126 +14,112 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN GENERAR PDF PROFESIONAL ---
+# --- FUNCIÓN GENERAR PDF CON LOGO ---
 def crear_pdf(titulo, precio, fecha, desc, link):
     pdf = FPDF()
     pdf.add_page()
     
-    # Encabezado con Nombre de Inmobiliaria
-    pdf.set_font("Arial", 'B', 20)
-    pdf.cell(200, 15, txt="CORTÉS INMOBILIARIA", ln=True, align='C')
-    pdf.set_font("Arial", 'I', 10)
-    pdf.cell(200, 5, txt="Ficha Técnica de Propiedad", ln=True, align='C')
-    pdf.ln(10)
+    # Intentar cargar Logo desde GitHub
+    try:
+        url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
+        response = requests.get(url_logo)
+        logo_data = BytesIO(response.content)
+        pdf.image(logo_data, x=10, y=8, w=33) # Logo en la esquina superior
+    except:
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='R')
+
+    pdf.ln(20)
     
-    # Cuerpo de la Ficha
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 12, txt=f" {titulo}", ln=True, fill=True)
+    # Título de la Propiedad con Estilo
+    pdf.set_draw_color(46, 125, 50) # Color verde para la línea
+    pdf.set_line_width(1)
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 12, txt=f"{titulo.upper()}", ln=True, border='B')
     pdf.ln(5)
     
+    # Datos Principales
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, txt=f"PRECIO: USD {precio}", ln=True)
+    pdf.set_text_color(46, 125, 50)
+    pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
+    pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 10, txt=f"Fecha de publicación: {fecha}", ln=True)
+    pdf.cell(0, 7, txt=f"Fecha de publicación: {fecha}", ln=True)
     pdf.ln(5)
     
+    # Descripción
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 10, txt="Descripción:", ln=True)
+    pdf.cell(0, 8, txt="Detalles de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
-    pdf.multi_cell(0, 8, txt=desc)
+    pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(10)
     
-    # Enlace Multimedia
+    # Link Drive
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 10, txt="LINK A FOTOS Y VIDEOS:", ln=True)
+    pdf.cell(0, 8, txt="LINK A MATERIAL MULTIMEDIA (FOTOS/VIDEOS):", ln=True)
     pdf.set_text_color(0, 0, 255)
     pdf.set_font("Arial", 'U', 10)
     pdf.multi_cell(0, 8, txt=link)
     
-    # Pie de página con tus datos de contacto
-    pdf.set_y(-50)
+    # Bloque de Contacto con Colores de Redes
+    pdf.set_y(-60)
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 5, txt="CONTACTO:", ln=True)
-    pdf.set_font("Arial", '', 9)
-    pdf.cell(0, 5, txt="Celular: +54 9 351 308-3986", ln=True)
-    pdf.cell(0, 5, txt="Instagram: @cortes.inmo", ln=True)
-    pdf.cell(0, 5, txt="TikTok: @cortes.inmobiliaria", ln=True)
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 8, txt="CONTACTO COMERCIAL:", ln=True, border='T')
+    
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 6, txt=f"WhatsApp: +54 9 351 308-3986", ln=True)
+    
+    # Simulación de colores de redes en texto
+    pdf.set_text_color(228, 64, 95) # Color Instagram
+    pdf.cell(0, 6, txt=f"Instagram: @cortes.inmo", ln=True)
+    
+    pdf.set_text_color(0, 0, 0) # Color TikTok (Negro)
+    pdf.cell(0, 6, txt=f"TikTok: @cortes.inmobiliaria", ln=True)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- ESTILOS PARA MÓVIL ---
+# --- ESTILOS APP ---
 st.markdown("""
     <style>
-    .stButton>button { border-radius: 12px; height: 3.8em; width: 100%; font-weight: bold; }
+    .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 10px; height: 3.5em; width: 100%; font-weight: bold; }
     .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 15px; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); }
-    h1, h2 { color: #1e1e1e; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- NAVEGACIÓN ---
-# He configurado el menú para que sea muy claro en el celular
-menu = st.sidebar.radio("MENÚ PRINCIPAL", ["📂 Cargar Nueva", "🖼️ Ver Mi Portfolio"])
-st.sidebar.markdown("---")
-st.sidebar.write("**Mis Datos de Contacto:**")
-st.sidebar.write("📞 3513083986")
+menu = st.sidebar.radio("MENÚ", ["📂 Cargar Propiedad", "🖼️ Mi Portfolio"])
 
-# --- SECCIÓN 1: CARGA ---
-if menu == "📂 Cargar Nueva":
-    st.title("📂 Nueva Propiedad")
-    with st.form("form_celular", clear_on_submit=True):
-        t = st.text_input("Nombre de la Propiedad")
-        p = st.text_input("Precio (USD)")
-        d = st.text_area("Descripción detallada")
-        l = st.text_input("Link de Drive (Fotos/Videos)")
-        
-        if st.form_submit_button("✅ GUARDAR PROPIEDAD"):
+if menu == "📂 Cargar Propiedad":
+    st.title("📂 Cargar Propiedad")
+    with st.form("carga", clear_on_submit=True):
+        t = st.text_input("Nombre Propiedad")
+        p = st.text_input("Precio USD")
+        d = st.text_area("Descripción")
+        l = st.text_input("Link de Drive")
+        if st.form_submit_button("GUARDAR"):
             if t and p and l:
-                fecha = datetime.now().strftime("%d/%m/%Y")
-                id_prop = datetime.now().timestamp()
-                nuevo = pd.DataFrame([[id_prop, fecha, t, p, d, l]], columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
-                nuevo.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
-                st.success("¡Propiedad guardada! Ya podés verla en el Portfolio.")
-            else:
-                st.error("Por favor completa Título, Precio y Link.")
+                id_p = datetime.now().timestamp()
+                df_n = pd.DataFrame([[id_p, datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
+                                    columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
+                df_n.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
+                st.success("Guardado correctamente.")
 
-# --- SECCIÓN 2: PORTFOLIO (VISIBLE Y FUNCIONAL) ---
 else:
     st.title("🖼️ Mi Portfolio")
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
-        if df.empty:
-            st.info("No hay propiedades registradas.")
-        else:
-            # Mostramos lo último cargado arriba de todo
-            for i, row in df.iloc[::-1].iterrows():
-                with st.container():
-                    st.markdown(f"""
-                    <div class="card">
-                        <h2 style="margin:0;">🏠 {row['Titulo']}</h2>
-                        <h3 style="color: #2e7d32; margin:5px 0;">USD {row['Precio']}</h3>
-                        <p style="font-size: 0.8em; color: gray;">Publicado: {row['Fecha']}</p>
-                        <p>{row['Descripcion']}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        # Botón para generar y descargar PDF
-                        pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'], row['LinkDrive'])
-                        st.download_button(
-                            label="📄 FICHA PDF",
-                            data=pdf_data,
-                            file_name=f"Ficha_{row['Titulo']}.pdf",
-                            mime="application/pdf"
-                        )
-                    with c2:
-                        st.link_button("📂 FOTOS DRIVE", row['LinkDrive'])
-                    
-                    # Opción de borrado al final por si hubo error
-                    if st.button(f"🗑️ Eliminar", key=f"del_{row['ID']}"):
-                        df_new = df[df['ID'] != row['ID']]
-                        df_new.to_csv(DB_FILE, index=False)
+        for i, row in df.iloc[::-1].iterrows():
+            with st.container():
+                st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><b>USD {row["Precio"]}</b></div>', unsafe_allow_html=True)
+                
+                # Botón de PDF con estilo "Compartir"
+                pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'], row['LinkDrive'])
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(label="📄 GENERAR Y ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", mime="application/pdf")
+                with col2:
+                    if st.button(f"🗑️ Borrar", key=f"del_{row['ID']}"):
+                        df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
                         st.rerun()
-                    st.markdown("---")

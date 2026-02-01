@@ -19,7 +19,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. LOGO ORIGINAL (Ubicación y tamaño respetado)
+    # 1. LOGO ORIGINAL
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
         response = requests.get(url_logo)
@@ -32,17 +32,16 @@ def crear_pdf(titulo, precio, fecha, desc):
 
     pdf.ln(30)
     
-    # 2. CUERPO DE LA FICHA
-    pdf.set_draw_color(46, 125, 50) 
+    # 2. CUERPO DE LA FICHA (AHORA EN NEGRO)
+    pdf.set_draw_color(0, 0, 0) # Línea Negra
+    pdf.set_text_color(0, 0, 0) # Texto Negro
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
     
-    pdf.set_text_color(46, 125, 50)
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
     
-    pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
     pdf.ln(10)
@@ -53,37 +52,38 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(15)
     
-    # 3. CÓDIGO QR A REDES (NO AL DRIVE)
+    # 3. CÓDIGO QR A INSTAGRAM
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN INSTAGRAM:", ln=True)
+    pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     
-    # El QR ahora lleva a tu Instagram
     ig_link = "https://www.instagram.com/cortes.inmo/"
     qr = qrcode.make(ig_link)
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 4. DATOS DE CONTACTO CON LOGOS
+    # 4. SECCIÓN CONTACTO (SIMPLIFICADA)
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, txt="CONTACTO COMERCIAL:", ln=True, border='T')
+    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T') # Título simplificado
     pdf.ln(2)
 
-    def agregar_contacto(icono_url, texto, y_pos, color=(0,0,0)):
+    def agregar_contacto(icono_url, texto, y_pos):
         try:
             res = requests.get(icono_url)
-            with open("temp_icon.png", "wb") as f: f.write(res.content)
-            pdf.image("temp_icon.png", x=10, y=y_pos, w=6)
+            if res.status_code == 200:
+                with open("temp_icon.png", "wb") as f: f.write(res.content)
+                pdf.image("temp_icon.png", x=10, y=y_pos, w=5)
         except: pass
-        pdf.set_xy(18, y_pos+1)
-        pdf.set_text_color(*color)
+        pdf.set_xy(17, y_pos+0.5)
+        pdf.set_text_color(0, 0, 0)
         pdf.set_font("Arial", '', 10)
         pdf.cell(0, 5, txt=texto, ln=True)
 
     base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
-    # Llamamos a los iconos que subiste (ws.png, ig.png, tk.png)
+    
+    # IMPORTANTE: Subí ws.png, ig.png y tk.png a GitHub para que estos funcionen
     agregar_contacto(base_url+"ws.png", "WhatsApp: +54 9 351 308-3986", pdf.get_y()+2)
-    agregar_contacto(base_url+"ig.png", "Instagram: @cortes.inmo", pdf.get_y()+2, (228, 64, 95))
+    agregar_contacto(base_url+"ig.png", "Instagram: @cortes.inmo", pdf.get_y()+2)
     agregar_contacto(base_url+"tk.png", "TikTok: @cortes.inmobiliaria", pdf.get_y()+2)
     
     return pdf.output(dest='S').encode('latin-1')
@@ -91,7 +91,7 @@ def crear_pdf(titulo, precio, fecha, desc):
 # --- INTERFAZ APP ---
 st.markdown("""
     <style>
-    .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; }
+    .stDownloadButton>button { background-color: #1e1e1e !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; border: none; }
     .card { background-color: #ffffff; padding: 25px; border-radius: 20px; border: 1px solid #f0f0f0; margin-bottom: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
@@ -104,7 +104,7 @@ if menu == "📂 CARGAR":
         t = st.text_input("Nombre de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link de Drive (Solo para vos)")
+        l = st.text_input("Link de Drive (Privado)")
         if st.form_submit_button("🚀 GUARDAR"):
             if t and p and l:
                 id_p = datetime.now().timestamp()
@@ -119,17 +119,14 @@ else:
         df = pd.read_csv(DB_FILE)
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
-                st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><h3 style="color: #2e7d32;">USD {row["Precio"]}</h3></div>', unsafe_allow_html=True)
-                
-                # Generamos el PDF (Ya no le pasamos el link de drive a la función del PDF)
+                st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><h3>USD {row["Precio"]}</h3></div>', unsafe_allow_html=True)
                 pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
                 
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.download_button(label="📄 ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", mime="application/pdf")
                 with c2:
-                    # Este botón solo lo ves vos en la app, no sale en el PDF
-                    st.link_button("📂 FOTOS (Drive)", row['LinkDrive'])
+                    st.link_button("📂 VER DRIVE", row['LinkDrive'])
                 with c3:
                     if st.button(f"🗑️ Borrar", key=f"del_{row['ID']}"):
                         df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)

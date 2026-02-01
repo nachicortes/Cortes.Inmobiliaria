@@ -32,7 +32,7 @@ def crear_pdf(titulo, precio, fecha, desc):
 
     pdf.ln(30)
     
-    # 2. CUERPO DE LA FICHA (ESTILO NEGRO)
+    # 2. CUERPO DE LA FICHA (NEGRO TOTAL)
     pdf.set_draw_color(0, 0, 0)
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 20)
@@ -52,7 +52,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(15)
     
-    # 3. CÓDIGO QR A INSTAGRAM (DRIVE PRIVADO)
+    # 3. CÓDIGO QR A REDES
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     
@@ -61,42 +61,46 @@ def crear_pdf(titulo, precio, fecha, desc):
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 4. SECCIÓN CONTACTO
+    # 4. SECCIÓN CONTACTO (ICONOS VISIBLES)
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
     pdf.ln(2)
 
-    def agregar_contacto(icono_url, texto, y_pos):
+    def agregar_contacto(icono_nombre, texto, y_pos):
+        base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
         try:
-            res = requests.get(icono_url)
+            res = requests.get(base_url + icono_nombre)
             if res.status_code == 200:
                 with open("temp_icon.png", "wb") as f: f.write(res.content)
-                pdf.image("temp_icon.png", x=10, y=y_pos, w=5)
-            pdf.set_xy(17, y_pos+0.5)
+                pdf.image("temp_icon.png", x=10, y=y_pos, w=5) # El logo de la red social
+            
+            pdf.set_xy(17, y_pos + 0.5)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", '', 10)
             pdf.cell(0, 5, txt=texto, ln=True)
         except:
             pass
 
-    base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
-    
-    agregar_contacto(base_url+"ws.png", "WhatsApp: +54 9 351 308-3986", pdf.get_y()+2)
-    agregar_contacto(base_url+"ig.png", "Instagram: @cortes.inmo", pdf.get_y()+2)
-    agregar_contacto(base_url+"tk.png", "TikTok: @cortes.inmobiliaria", pdf.get_y()+2)
+    # Llamamos a los contactos con sus iconos
+    y_actual = pdf.get_y() + 2
+    agregar_contacto("ws.png", "WhatsApp: +54 9 351 308-3986", y_actual)
+    y_actual += 7
+    agregar_contacto("ig.png", "Instagram: @cortes.inmo", y_actual)
+    y_actual += 7
+    agregar_contacto("tk.png", "TikTok: @cortes.inmobiliaria", y_actual)
     
     return pdf.output(dest='S').encode('latin-1')
 
 # --- INTERFAZ APP ---
 st.markdown("""
     <style>
-    .stDownloadButton>button { background-color: #000000 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; border: none; }
+    .stDownloadButton>button { background-color: #000000 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; }
     .card { background-color: #ffffff; padding: 25px; border-radius: 20px; border: 1px solid #f0f0f0; margin-bottom: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
-menu = st.sidebar.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"])
+menu = st.sidebar.radio("MENÚ", ["📂 CARGAR", "🖼️ PORTFOLIO"])
 
 if menu == "📂 CARGAR":
     st.title("📂 Nueva Propiedad")
@@ -104,17 +108,17 @@ if menu == "📂 CARGAR":
         t = st.text_input("Nombre de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link de Drive (Privado)")
+        l = st.text_input("Link de Drive (Confidencial)")
         if st.form_submit_button("🚀 GUARDAR"):
             if t and p and l:
                 id_p = datetime.now().timestamp()
                 df_n = pd.DataFrame([[id_p, datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
                                     columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
                 df_n.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
-                st.success("¡Propiedad Guardada!")
+                st.success("Guardado. Revisá el Portfolio.")
 
 else:
-    st.title("🖼️ Mi Portfolio")
+    st.title("🖼️ Portfolio Personal")
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
         for i, row in df.iloc[::-1].iterrows():

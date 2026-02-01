@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import pandas as pd
+from datetime import datetime
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Portfolio Cortes Inmo", layout="wide")
@@ -16,57 +17,55 @@ st.markdown("""
 
 # --- BASE DE DATOS LOCAL ---
 DB_FILE = "db_inmuebles.csv"
-
-# Función para limpiar/crear la base de datos si hay errores
-def reset_db():
-    df_empty = pd.DataFrame(columns=["Titulo", "Precio", "Archivos"])
-    df_empty.to_csv(DB_FILE, index=False)
-
 if not os.path.exists(DB_FILE) or os.stat(DB_FILE).st_size == 0:
-    reset_db()
+    pd.DataFrame(columns=["Fecha", "Titulo", "Precio", "Descripcion"]).to_csv(DB_FILE, index=False)
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png", use_container_width=True)
     st.markdown("---")
-    menu = st.radio("Gestión:", ["📂 Cargar al Portfolio", "🖼️ Ver Mis Propiedades"])
+    menu = st.radio("Gestión:", ["📂 Cargar Propiedad", "🖼️ Ver Portfolio"])
     st.markdown("---")
     st.markdown('<a class="btn-side wa" href="https://wa.me/5493513083986">WhatsApp</a>', unsafe_allow_html=True)
     st.markdown('<a class="btn-side ig" href="https://www.instagram.com/cortes.inmo/">Instagram</a>', unsafe_allow_html=True)
 
-# --- PANEL DE CARGA MULTIMEDIA ---
-if menu == "📂 Cargar al Portfolio":
-    st.title("📂 Administrar Mis Propiedades")
-    with st.form("form_personal", clear_on_submit=True):
-        t = st.text_input("Nombre de la Propiedad")
+# --- PANEL DE CARGA ---
+if menu == "📂 Cargar Propiedad":
+    st.title("📂 Nueva Publicación")
+    with st.form("form_full", clear_on_submit=True):
+        t = st.text_input("Nombre de la Propiedad (ej: Casa Valle Escondido)")
         p = st.text_input("Precio USD")
-        # ACTIVADO: Carga de múltiples fotos y videos
-        f = st.file_uploader("Subir Fotos y Videos", type=['jpg', 'png', 'jpeg', 'mp4', 'mov'], accept_multiple_files=True)
+        d = st.text_area("Descripción de la propiedad")
+        f = st.file_uploader("Subir Fotos y Videos", type=['jpg','png','jpeg','mp4','mov'], accept_multiple_files=True)
         
-        if st.form_submit_button("✅ GUARDAR EN PORTFOLIO"):
+        if st.form_submit_button("✅ GUARDAR Y PREVISUALIZAR"):
             if t and p and f:
-                cant = len(f)
-                # Guardamos la cantidad de archivos para el registro
-                nuevo = pd.DataFrame([[t, p, f"{cant} archivos"]], columns=["Titulo", "Precio", "Archivos"])
+                fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+                nuevo = pd.DataFrame([[fecha, t, p, d]], columns=["Fecha", "Titulo", "Precio", "Descripcion"])
                 nuevo.to_csv(DB_FILE, mode='a', header=False, index=False)
-                st.success(f"¡{t} guardado con {cant} archivos con éxito!")
+                
+                st.success(f"¡{t} guardado! Mirá cómo quedó abajo:")
+                # Previsualización inmediata
+                for file in f:
+                    if file.type.startswith('image'):
+                        st.image(file, caption=t, use_container_width=True)
+                    elif file.type.startswith('video'):
+                        st.video(file)
             else:
-                st.warning("Completá Título, Precio y subí al menos un archivo.")
+                st.warning("Completá Título, Precio y subí archivos.")
 
-# --- VISTA DE PORTFOLIO (CORREGIDA) ---
+# --- VISTA DE PORTFOLIO ---
 else:
-    st.title("🖼️ Mi Portfolio")
+    st.title("🖼️ Mi Portfolio de Propiedades")
     try:
-        # Leemos forzando los nombres de columna para evitar el KeyError
-        df = pd.read_csv(DB_FILE, names=["Titulo", "Precio", "Archivos"], header=0)
+        df = pd.read_csv(DB_FILE)
         if not df.empty:
-            for i, row in df.iterrows():
+            for i, row in df.iloc[::-1].iterrows(): # Mostrar lo último primero
                 with st.expander(f"🏠 {row['Titulo']} - USD {row['Precio']}"):
-                    st.write(f"**Contenido cargado:** {row['Archivos']}")
+                    st.write(f"**Fecha de carga:** {row['Fecha']}")
+                    st.write(f"**Descripción:** {row['Descripcion']}")
+                    st.info("💡 En esta versión de portfolio privado, los archivos cargados se procesan en el momento. Para que queden guardados permanentemente y se vean siempre, necesitamos alojarlos en una carpeta de GitHub.")
         else:
-            st.info("No hay propiedades cargadas.")
-    except Exception:
-        st.error("Error en el formato de la base de datos.")
-        if st.button("Reiniciar Base de Datos"):
-            reset_db()
-            st.rerun()
+            st.info("No hay propiedades en el portfolio.")
+    except Exception as e:
+        st.error(f"Error al leer: {e}")

@@ -14,86 +14,79 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN PDF PROFESIONAL CORREGIDA ---
+# --- FUNCIÓN PDF PROFESIONAL ---
 def crear_pdf(titulo, precio, fecha, desc, link):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. LOGO A COLOR (Desde tu GitHub)
+    # 1. LOGO ORIGINAL
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
         response = requests.get(url_logo)
-        logo_data = BytesIO(response.content)
-        # Guardamos el logo temporalmente para evitar errores de lectura
         with open("temp_logo.png", "wb") as f:
-            f.write(logo_data.getbuffer())
-        pdf.image("temp_logo.png", x=10, y=8, w=40) 
+            f.write(response.content)
+        pdf.image("temp_logo.png", x=10, y=10, w=45) # Respeta proporción original
     except:
         pdf.set_font("Arial", 'B', 16)
-        pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='R')
+        pdf.text(10, 20, "CORTÉS INMOBILIARIA")
 
-    pdf.ln(25)
+    pdf.ln(30)
     
     # 2. CUERPO DE LA FICHA
     pdf.set_draw_color(46, 125, 50) 
-    pdf.set_font("Arial", 'B', 18)
+    pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
     
     pdf.set_text_color(46, 125, 50)
-    pdf.set_font("Arial", 'B', 14)
+    pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
     
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
-    pdf.ln(5)
+    pdf.ln(10)
     
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="Descripción:", ln=True)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(10)
     
-    # 3. LINK DRIVE
+    # 3. CÓDIGO QR (ÚNICO ACCESO A FOTOS - PRIVADO)
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="VER FOTOS Y VIDEOS AQUÍ:", ln=True)
-    pdf.set_text_color(0, 0, 255)
-    pdf.set_font("Arial", 'U', 10)
-    pdf.multi_cell(0, 8, txt=link)
+    pdf.cell(0, 8, txt="ESCANEÁ PARA VER FOTOS Y VIDEOS:", ln=True)
     
-    # 4. CÓDIGO QR (SOLUCIÓN AL ERROR ATTRIBUTEERROR)
-    try:
-        pdf.set_y(-70)
-        msg = f"Hola, me interesa la propiedad: {titulo}"
-        wa_link = f"https://wa.me/5493513083986?text={msg.replace(' ', '%20')}"
-        
-        qr = qrcode.QRCode(box_size=10, border=1)
-        qr.add_data(wa_link)
-        qr.make(fit=True)
-        img_qr = qr.make_image(fill_color="black", back_color="white")
-        
-        # Guardamos el QR físicamente antes de insertarlo
-        img_qr.save("temp_qr.png")
-        pdf.image("temp_qr.png", x=150, y=pdf.get_y(), w=40)
-    except:
-        pass # Si falla el QR, que igual genere el PDF
+    msg = f"Hola, me interesa la propiedad: {titulo}. Link: {link}"
+    qr = qrcode.make(link) # El QR lleva al Drive, pero el link NO SE ESCRIBE
+    qr.save("temp_qr.png")
+    pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 5. DATOS DE CONTACTO
+    # 4. DATOS DE CONTACTO CON LOGOS
     pdf.set_y(-60)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="CONTACTO COMERCIAL:", ln=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 6, txt="WhatsApp: +54 9 351 308-3986", ln=True)
-    pdf.set_text_color(228, 64, 95) 
-    pdf.cell(0, 6, txt="Instagram: @cortes.inmo", ln=True)
-    pdf.set_text_color(0, 0, 0) 
-    pdf.cell(0, 6, txt="TikTok: @cortes.inmobiliaria", ln=True)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, txt="CONTACTO COMERCIAL:", ln=True, border='T')
+    pdf.ln(2)
+
+    def agregar_contacto(icono_url, texto, y_pos, color=(0,0,0)):
+        try:
+            res = requests.get(icono_url)
+            with open("temp_icon.png", "wb") as f: f.write(res.content)
+            pdf.image("temp_icon.png", x=10, y=y_pos, w=6)
+        except: pass
+        pdf.set_xy(18, y_pos+1)
+        pdf.set_text_color(*color)
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 5, txt=texto, ln=True)
+
+    base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
+    agregar_contacto(base_url+"ws.png", "WhatsApp: +54 9 351 308-3986", pdf.get_y()+2)
+    agregar_contacto(base_url+"ig.png", "Instagram: @cortes.inmo", pdf.get_y()+2, (228, 64, 95))
+    agregar_contacto(base_url+"tk.png", "TikTok: @cortes.inmobiliaria", pdf.get_y()+2)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ ---
+# --- INTERFAZ APP ---
 st.markdown("""
     <style>
     .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; }
@@ -109,8 +102,8 @@ if menu == "📂 CARGAR":
         t = st.text_input("Nombre de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link de Drive")
-        if st.form_submit_button("🚀 GUARDAR EN PORTFOLIO"):
+        l = st.text_input("Link de Drive (Solo para uso interno)")
+        if st.form_submit_button("🚀 GUARDAR"):
             if t and p and l:
                 id_p = datetime.now().timestamp()
                 df_n = pd.DataFrame([[id_p, datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
@@ -125,8 +118,6 @@ else:
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
                 st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><h3 style="color: #2e7d32;">USD {row["Precio"]}</h3></div>', unsafe_allow_html=True)
-                
-                # Generamos el PDF pasando los datos de la fila
                 pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'], row['LinkDrive'])
                 
                 c1, c2 = st.columns(2)

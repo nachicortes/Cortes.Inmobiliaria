@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Portfolio Cortes Inmo", layout="wide")
+st.set_page_config(page_title="Cortes Inmobiliaria - Gestión", layout="wide")
 
 # --- ESTILOS ---
 st.markdown("""
@@ -15,16 +15,23 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- BASE DE DATOS LOCAL ---
+# --- GESTIÓN DE BASE DE DATOS ---
 DB_FILE = "db_inmuebles.csv"
-if not os.path.exists(DB_FILE) or os.stat(DB_FILE).st_size == 0:
-    pd.DataFrame(columns=["Fecha", "Titulo", "Precio", "Descripcion"]).to_csv(DB_FILE, index=False)
+
+def load_data():
+    if not os.path.exists(DB_FILE):
+        return pd.DataFrame(columns=["Fecha", "Titulo", "Precio", "Descripcion"])
+    try:
+        # Forzamos la lectura de las columnas exactas para evitar el KeyError 'Titulo'
+        return pd.read_csv(DB_FILE, usecols=["Fecha", "Titulo", "Precio", "Descripcion"])
+    except:
+        return pd.DataFrame(columns=["Fecha", "Titulo", "Precio", "Descripcion"])
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png", use_container_width=True)
     st.markdown("---")
-    menu = st.radio("Gestión:", ["📂 Cargar Propiedad", "🖼️ Ver Portfolio"])
+    menu = st.radio("Ir a:", ["📂 Cargar Propiedad", "🖼️ Ver Portfolio"])
     st.markdown("---")
     st.markdown('<a class="btn-side wa" href="https://wa.me/5493513083986">WhatsApp</a>', unsafe_allow_html=True)
     st.markdown('<a class="btn-side ig" href="https://www.instagram.com/cortes.inmo/">Instagram</a>', unsafe_allow_html=True)
@@ -32,40 +39,53 @@ with st.sidebar:
 # --- PANEL DE CARGA ---
 if menu == "📂 Cargar Propiedad":
     st.title("📂 Nueva Publicación")
-    with st.form("form_full", clear_on_submit=True):
-        t = st.text_input("Nombre de la Propiedad (ej: Casa Valle Escondido)")
+    with st.form("form_v3", clear_on_submit=True):
+        t = st.text_input("Nombre de la Propiedad")
         p = st.text_input("Precio USD")
-        d = st.text_area("Descripción de la propiedad")
-        f = st.file_uploader("Subir Fotos y Videos", type=['jpg','png','jpeg','mp4','mov'], accept_multiple_files=True)
+        d = st.text_area("Descripción detallada")
+        f = st.file_uploader("Fotos y Videos", type=['jpg','png','jpeg','mp4','mov'], accept_multiple_files=True)
         
-        if st.form_submit_button("✅ GUARDAR Y PREVISUALIZAR"):
+        if st.form_submit_button("🚀 PUBLICAR EN PORTFOLIO"):
             if t and p and f:
-                fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+                fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
+                # Guardamos solo el texto en el CSV para evitar errores de base de datos
                 nuevo = pd.DataFrame([[fecha, t, p, d]], columns=["Fecha", "Titulo", "Precio", "Descripcion"])
-                nuevo.to_csv(DB_FILE, mode='a', header=False, index=False)
+                nuevo.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
                 
-                st.success(f"¡{t} guardado! Mirá cómo quedó abajo:")
-                # Previsualización inmediata
-                for file in f:
-                    if file.type.startswith('image'):
-                        st.image(file, caption=t, use_container_width=True)
-                    elif file.type.startswith('video'):
-                        st.video(file)
+                st.success(f"¡{t} guardada! Mirá la previsualización:")
+                # Guardamos los archivos en la sesión para que se vean en el portfolio
+                if 'temp_media' not in st.session_state: st.session_state['temp_media'] = {}
+                st.session_state['temp_media'][t] = f
+                
+                # Mostrar en el momento
+                cols = st.columns(2)
+                for idx, file in enumerate(f):
+                    with cols[idx % 2]:
+                        if file.type.startswith('image'): st.image(file, use_container_width=True)
+                        else: st.video(file)
             else:
-                st.warning("Completá Título, Precio y subí archivos.")
+                st.error("Faltan datos o archivos.")
 
 # --- VISTA DE PORTFOLIO ---
 else:
-    st.title("🖼️ Mi Portfolio de Propiedades")
-    try:
-        df = pd.read_csv(DB_FILE)
-        if not df.empty:
-            for i, row in df.iloc[::-1].iterrows(): # Mostrar lo último primero
-                with st.expander(f"🏠 {row['Titulo']} - USD {row['Precio']}"):
-                    st.write(f"**Fecha de carga:** {row['Fecha']}")
-                    st.write(f"**Descripción:** {row['Descripcion']}")
-                    st.info("💡 En esta versión de portfolio privado, los archivos cargados se procesan en el momento. Para que queden guardados permanentemente y se vean siempre, necesitamos alojarlos en una carpeta de GitHub.")
-        else:
-            st.info("No hay propiedades en el portfolio.")
-    except Exception as e:
-        st.error(f"Error al leer: {e}")
+    st.title("🖼️ Mi Portfolio")
+    df = load_data()
+    
+    if df.empty:
+        st.info("No hay propiedades cargadas.")
+    else:
+        for i, row in df.iloc[::-1].iterrows():
+            with st.expander(f"🏠 {row['Titulo']} - USD {row['Precio']}"):
+                st.write(f"**Publicado:** {row['Fecha']}")
+                st.write(f"**Descripción:** {row['Descripcion']}")
+                
+                # Intentar mostrar multimedia si está en la sesión actual
+                if 'temp_media' in st.session_state and row['Titulo'] in st.session_state['temp_media']:
+                    archivos = st.session_state['temp_media'][row['Titulo']]
+                    cols = st.columns(3)
+                    for idx, file in enumerate(archivos):
+                        with cols[idx % 3]:
+                            if file.type.startswith('image'): st.image(file)
+                            else: st.video(file)
+                else:
+                    st.warning("⚠️ Las fotos se ven solo recién cargadas. Para guardarlas permanentes necesitamos conectarnos a una carpeta de Drive o GitHub.")

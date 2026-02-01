@@ -18,14 +18,13 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. LOGO PRINCIPAL CENTRADO (Desde tu GitHub)
+    # 1. LOGO PRINCIPAL CENTRADO
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
         res = requests.get(url_logo, timeout=10)
         if res.status_code == 200:
             with open("temp_logo.png", "wb") as f: f.write(res.content)
-            # Centrado: (210mm ancho A4 - 60mm logo) / 2 = 75
-            pdf.image("temp_logo.png", x=75, y=10, w=60)
+            pdf.image("temp_logo.png", x=75, y=10, w=60) # Centrado (210-60)/2 = 75
     except:
         pdf.set_font("Arial", 'B', 16)
         pdf.set_xy(10, 20)
@@ -33,8 +32,9 @@ def crear_pdf(titulo, precio, fecha, desc):
 
     pdf.ln(45)
     
-    # 2. CUERPO DE LA FICHA
+    # 2. CUERPO DE LA FICHA (NEGRO PROFESIONAL)
     pdf.set_text_color(0, 0, 0)
+    pdf.set_draw_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
@@ -49,22 +49,21 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
-    pdf.ln(15)
+    pdf.ln(10)
     
-    # 3. QR A REDES
+    # 3. QR A INSTAGRAM
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 4. SECCIÓN CONTACTO (USANDO ICONOS WEB DIRECTOS)
+    # 4. SECCIÓN CONTACTO (ICONOS WEB DIRECTOS)
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
     pdf.ln(2)
 
-    # Links a iconos PNG reales de alta calidad
     iconos = {
         "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
         "ig": "https://cdn-icons-png.flaticon.com/512/174/174855.png",
@@ -88,7 +87,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ STREAMLIT ---
+# --- INTERFAZ (BOTONES VERDES Y ESTILO) ---
 st.markdown("""
     <style>
     div.stDownloadButton > button {
@@ -97,40 +96,66 @@ st.markdown("""
         border-radius: 10px;
         font-weight: bold;
         width: 100%;
+        border: none;
+        height: 3.5em;
     }
-    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; }
+    div.stDownloadButton > button:hover {
+        background-color: #218838 !important;
+    }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
-menu = st.sidebar.radio("MENÚ", ["📂 CARGAR", "🖼️ PORTFOLIO"])
+# --- MENÚ LATERAL ---
+with st.sidebar:
+    st.title("🏡 CORTÉS INMO")
+    menu = st.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"])
+    
+    st.divider()
+    st.subheader("Seguridad")
+    # BOTÓN DE COPIA DE SEGURIDAD
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "rb") as f:
+            st.download_button(
+                label="💾 COPIA DE SEGURIDAD",
+                data=f,
+                file_name=f"Respaldo_Portfolio_{datetime.now().strftime('%d_%m_%Y')}.csv",
+                mime="text/csv"
+            )
 
+# --- LÓGICA DE PÁGINAS ---
 if menu == "📂 CARGAR":
     st.title("📂 Nueva Propiedad")
     with st.form("carga", clear_on_submit=True):
-        t = st.text_input("Título")
+        t = st.text_input("Título de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link Drive")
+        l = st.text_input("Link de Drive (Confidencial)")
         if st.form_submit_button("🚀 GUARDAR"):
             if t and p:
                 df_n = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
                                     columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
                 df_n.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
-                st.success("¡Guardado!")
+                st.success("¡Propiedad Guardada!")
+
 else:
     st.title("🖼️ Portfolio Personal")
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
-        for _, row in df.iloc[::-1].iterrows():
-            with st.container():
-                st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {row["Precio"]}</h4></div>', unsafe_allow_html=True)
-                pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                    st.download_button(label="📄 ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf")
-                with col2:
-                    st.link_button("📂 DRIVE", str(row['LinkDrive']))
-                with col3:
-                    if st.button("🗑️", key=f"del_{row['ID']}"):
-                        df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
-                        st.rerun()
+        if df.empty:
+            st.info("No hay propiedades cargadas.")
+        else:
+            for _, row in df.iloc[::-1].iterrows():
+                with st.container():
+                    st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {row["Precio"]}</h4></div>', unsafe_allow_html=True)
+                    pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    
+                    c1, c2, c3 = st.columns([2, 1, 1])
+                    with c1:
+                        st.download_button(label="📄 ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf")
+                    with c2:
+                        st.link_button("📂 DRIVE", str(row['LinkDrive']))
+                    with c3:
+                        if st.button("🗑️", key=f"del_{row['ID']}"):
+                            df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
+                            st.rerun()

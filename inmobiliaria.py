@@ -1,11 +1,15 @@
 import streamlit as st
 from st_files_connection import FilesConnection
 
-# --- 1. CONFIGURACIÓN Y ESTILO ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Cortes Inmobiliaria", layout="wide")
 
 # --- 2. CONEXIÓN (Aquí se define 'conn') ---
-conn = st.connection("gdrive", type=FilesConnection)
+try:
+    conn = st.connection("gdrive", type=FilesConnection)
+except Exception as e:
+    st.error(f"Error de conexión: {e}")
+    conn = None
 
 # --- 3. BARRA LATERAL (Tus Redes y Logo) ---
 with st.sidebar:
@@ -22,7 +26,7 @@ with st.sidebar:
 if menu == "🖼️ Galería de Propiedades":
     st.title("🏠 Nuestras Propiedades")
     st.info("Sincronizando con Google Drive...")
-    # Mañana activamos la visualización automática aquí
+    # Aquí aparecerán tus carpetas de Drive automáticamente
 
 else:
     st.title("🔐 Panel de Administración")
@@ -33,17 +37,17 @@ else:
         with st.form("carga_completa", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                titulo = st.text_input("Título de la Propiedad")
+                titulo = st.text_input("Título de la Propiedad (Ej: Casa Valle Escondido)")
                 precio = st.text_input("Precio USD")
                 ubicacion = st.text_input("Ubicación")
             with col2:
                 descripcion = st.text_area("Descripción")
-                pdf = st.file_uploader("Subir PDF", type="pdf")
+                pdf = st.file_uploader("Subir Ficha PDF", type="pdf")
             
             archivos = st.file_uploader("Subir Fotos/Videos", accept_multiple_files=True)
             
             if st.form_submit_button("🚀 PUBLICAR AHORA"):
-                if titulo and archivos:
+                if conn and titulo and archivos:
                     with st.spinner("Subiendo a Drive..."):
                         for arc in archivos:
                             # Ruta: carpeta compartida / título / nombre de archivo
@@ -55,4 +59,4 @@ else:
                             except Exception as e:
                                 st.error(f"Error en {arc.name}: {e}")
                 else:
-                    st.warning("Faltan datos obligatorios.")
+                    st.warning("Faltan datos obligatorios o la conexión falló.")

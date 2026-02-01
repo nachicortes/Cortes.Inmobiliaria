@@ -5,105 +5,109 @@ import os
 from fpdf import FPDF
 import requests
 from io import BytesIO
+import qrcode
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Gestión Cortés Inmo", layout="wide")
 
-# --- BASE DE DATOS LOCAL ---
 DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN GENERAR PDF CON LOGO ---
+# --- FUNCIÓN PDF PROFESIONAL ---
 def crear_pdf(titulo, precio, fecha, desc, link):
     pdf = FPDF()
     pdf.add_page()
     
-    # Intentar cargar Logo desde GitHub
+    # 1. LOGO A COLOR (Desde tu GitHub)
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
         response = requests.get(url_logo)
         logo_data = BytesIO(response.content)
-        pdf.image(logo_data, x=10, y=8, w=33) # Logo en la esquina superior
+        pdf.image(logo_data, x=10, y=8, w=40) 
     except:
         pdf.set_font("Arial", 'B', 16)
         pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='R')
 
-    pdf.ln(20)
+    pdf.ln(25)
     
-    # Título de la Propiedad con Estilo
-    pdf.set_draw_color(46, 125, 50) # Color verde para la línea
-    pdf.set_line_width(1)
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 12, txt=f"{titulo.upper()}", ln=True, border='B')
+    # 2. CUERPO DE LA FICHA
+    pdf.set_draw_color(46, 125, 50) # Verde institucional
+    pdf.set_font("Arial", 'B', 18)
+    pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
     
-    # Datos Principales
-    pdf.set_font("Arial", 'B', 12)
     pdf.set_text_color(46, 125, 50)
+    pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
+    
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 7, txt=f"Fecha de publicación: {fecha}", ln=True)
+    pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
     pdf.ln(5)
     
-    # Descripción
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="Detalles de la propiedad:", ln=True)
+    pdf.cell(0, 8, txt="Descripción:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(10)
     
-    # Link Drive
+    # 3. LINK DRIVE
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="LINK A MATERIAL MULTIMEDIA (FOTOS/VIDEOS):", ln=True)
+    pdf.cell(0, 8, txt="VER FOTOS Y VIDEOS AQUÍ:", ln=True)
     pdf.set_text_color(0, 0, 255)
     pdf.set_font("Arial", 'U', 10)
     pdf.multi_cell(0, 8, txt=link)
     
-    # Bloque de Contacto con Colores de Redes
-    pdf.set_y(-60)
+    # 4. CÓDIGO QR PARA WHATSAPP
+    pdf.set_y(-70)
+    # Generar QR dinámico
+    msg = f"Hola, me interesa la propiedad: {titulo}"
+    wa_link = f"https://wa.me/5493513083986?text={msg.replace(' ', '%20')}"
+    qr = qrcode.make(wa_link)
+    qr_buffer = BytesIO()
+    qr.save(qr_buffer, format="PNG")
+    pdf.image(qr_buffer, x=150, y=pdf.get_y(), w=40) # QR a la derecha
+    
+    # 5. DATOS DE CONTACTO (Colores Redes)
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="CONTACTO COMERCIAL:", ln=True, border='T')
-    
+    pdf.cell(0, 8, txt="CONTACTO COMERCIAL:", ln=True)
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 6, txt=f"WhatsApp: +54 9 351 308-3986", ln=True)
+    pdf.cell(0, 6, txt="WhatsApp: +54 9 351 308-3986", ln=True)
     
-    # Simulación de colores de redes en texto
-    pdf.set_text_color(228, 64, 95) # Color Instagram
-    pdf.cell(0, 6, txt=f"Instagram: @cortes.inmo", ln=True)
+    pdf.set_text_color(228, 64, 95) # Instagram Pink
+    pdf.cell(0, 6, txt="Instagram: @cortes.inmo", ln=True)
     
-    pdf.set_text_color(0, 0, 0) # Color TikTok (Negro)
-    pdf.cell(0, 6, txt=f"TikTok: @cortes.inmobiliaria", ln=True)
+    pdf.set_text_color(0, 0, 0) # TikTok Black
+    pdf.cell(0, 6, txt="TikTok: @cortes.inmobiliaria", ln=True)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- ESTILOS APP ---
+# --- INTERFAZ APP ---
 st.markdown("""
     <style>
-    .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 10px; height: 3.5em; width: 100%; font-weight: bold; }
-    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 15px; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); }
+    .stDownloadButton>button { background-color: #2e7d32 !important; color: white !important; border-radius: 12px; height: 4em; width: 100%; font-weight: bold; border: none; }
+    .card { background-color: #ffffff; padding: 25px; border-radius: 20px; border: 1px solid #f0f0f0; margin-bottom: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
-# --- NAVEGACIÓN ---
-menu = st.sidebar.radio("MENÚ", ["📂 Cargar Propiedad", "🖼️ Mi Portfolio"])
+menu = st.sidebar.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"])
 
-if menu == "📂 Cargar Propiedad":
-    st.title("📂 Cargar Propiedad")
-    with st.form("carga", clear_on_submit=True):
-        t = st.text_input("Nombre Propiedad")
+if menu == "📂 CARGAR":
+    st.title("📂 Nueva Propiedad")
+    with st.form("form_carga", clear_on_submit=True):
+        t = st.text_input("Nombre de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
         l = st.text_input("Link de Drive")
-        if st.form_submit_button("GUARDAR"):
+        if st.form_submit_button("🚀 GUARDAR EN PORTFOLIO"):
             if t and p and l:
                 id_p = datetime.now().timestamp()
                 df_n = pd.DataFrame([[id_p, datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
                                     columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
                 df_n.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
-                st.success("Guardado correctamente.")
+                st.success("¡Propiedad Guardada!")
 
 else:
     st.title("🖼️ Mi Portfolio")
@@ -111,15 +115,13 @@ else:
         df = pd.read_csv(DB_FILE)
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
-                st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><b>USD {row["Precio"]}</b></div>', unsafe_allow_html=True)
-                
-                # Botón de PDF con estilo "Compartir"
+                st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><h3 style="color: #2e7d32;">USD {row["Precio"]}</h3></div>', unsafe_allow_html=True)
                 pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'], row['LinkDrive'])
                 
-                col1, col2 = st.columns(2)
-                with col1:
+                c1, c2 = st.columns(2)
+                with c1:
                     st.download_button(label="📄 GENERAR Y ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", mime="application/pdf")
-                with col2:
+                with c2:
                     if st.button(f"🗑️ Borrar", key=f"del_{row['ID']}"):
                         df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
                         st.rerun()

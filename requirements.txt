@@ -1,4 +1,5 @@
 streamlit
 st-files-connection
 gcsfs
+gdrive-fs
 google-auth

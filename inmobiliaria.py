@@ -61,3 +61,4 @@ else:
     else:
         st.info("Todavía no cargaste propiedades a tu portfolio.")
 
+

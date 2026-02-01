@@ -93,3 +93,4 @@ else:
         if os.path.exists(BASE_DIR): shutil.rmtree(BASE_DIR)
         st.success("Sistema reseteado. Empezamos de cero sin errores.")
         st.rerun()
+

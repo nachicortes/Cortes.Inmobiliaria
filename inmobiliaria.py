@@ -15,17 +15,17 @@ if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
 # --- FUNCIÓN PDF PROFESIONAL ---
-def crear_pdf(titulo, precio, fecha, desc, link):
+def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. LOGO ORIGINAL
+    # 1. LOGO ORIGINAL (Ubicación y tamaño respetado)
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/logo.png"
         response = requests.get(url_logo)
         with open("temp_logo.png", "wb") as f:
             f.write(response.content)
-        pdf.image("temp_logo.png", x=10, y=10, w=45) # Respeta proporción original
+        pdf.image("temp_logo.png", x=10, y=10, w=45) 
     except:
         pdf.set_font("Arial", 'B', 16)
         pdf.text(10, 20, "CORTÉS INMOBILIARIA")
@@ -51,14 +51,15 @@ def crear_pdf(titulo, precio, fecha, desc, link):
     pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
-    pdf.ln(10)
+    pdf.ln(15)
     
-    # 3. CÓDIGO QR (ÚNICO ACCESO A FOTOS - PRIVADO)
+    # 3. CÓDIGO QR A REDES (NO AL DRIVE)
     pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="ESCANEÁ PARA VER FOTOS Y VIDEOS:", ln=True)
+    pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN INSTAGRAM:", ln=True)
     
-    msg = f"Hola, me interesa la propiedad: {titulo}. Link: {link}"
-    qr = qrcode.make(link) # El QR lleva al Drive, pero el link NO SE ESCRIBE
+    # El QR ahora lleva a tu Instagram
+    ig_link = "https://www.instagram.com/cortes.inmo/"
+    qr = qrcode.make(ig_link)
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
@@ -80,6 +81,7 @@ def crear_pdf(titulo, precio, fecha, desc, link):
         pdf.cell(0, 5, txt=texto, ln=True)
 
     base_url = "https://raw.githubusercontent.com/nachicortes/cortes.inmobiliaria/main/"
+    # Llamamos a los iconos que subiste (ws.png, ig.png, tk.png)
     agregar_contacto(base_url+"ws.png", "WhatsApp: +54 9 351 308-3986", pdf.get_y()+2)
     agregar_contacto(base_url+"ig.png", "Instagram: @cortes.inmo", pdf.get_y()+2, (228, 64, 95))
     agregar_contacto(base_url+"tk.png", "TikTok: @cortes.inmobiliaria", pdf.get_y()+2)
@@ -102,7 +104,7 @@ if menu == "📂 CARGAR":
         t = st.text_input("Nombre de la Propiedad")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
-        l = st.text_input("Link de Drive (Solo para uso interno)")
+        l = st.text_input("Link de Drive (Solo para vos)")
         if st.form_submit_button("🚀 GUARDAR"):
             if t and p and l:
                 id_p = datetime.now().timestamp()
@@ -118,12 +120,17 @@ else:
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
                 st.markdown(f'<div class="card"><h2>🏠 {row["Titulo"]}</h2><h3 style="color: #2e7d32;">USD {row["Precio"]}</h3></div>', unsafe_allow_html=True)
-                pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'], row['LinkDrive'])
                 
-                c1, c2 = st.columns(2)
+                # Generamos el PDF (Ya no le pasamos el link de drive a la función del PDF)
+                pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                
+                c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.download_button(label="📄 GENERAR Y ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", mime="application/pdf")
+                    st.download_button(label="📄 ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", mime="application/pdf")
                 with c2:
+                    # Este botón solo lo ves vos en la app, no sale en el PDF
+                    st.link_button("📂 FOTOS (Drive)", row['LinkDrive'])
+                with c3:
                     if st.button(f"🗑️ Borrar", key=f"del_{row['ID']}"):
                         df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
                         st.rerun()

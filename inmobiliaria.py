@@ -60,3 +60,4 @@ else:
                 st.markdown("---")
     else:
         st.info("Todavía no cargaste propiedades a tu portfolio.")
+

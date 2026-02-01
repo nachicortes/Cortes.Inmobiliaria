@@ -6,8 +6,12 @@ from fpdf import FPDF
 import requests
 import qrcode
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Gestión Cortés Inmo", layout="wide")
+# --- CONFIGURACIÓN DE LA APP (AQUÍ DEFINIMOS EL ICONO PARA EL CELU) ---
+st.set_page_config(
+    page_title="Cortés Inmobiliaria",
+    page_icon="https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", # Este es tu logo
+    layout="wide"
+)
 
 DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
@@ -106,9 +110,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ LATERAL CON LOGO ---
+# --- MENÚ LATERAL ---
 with st.sidebar:
-    # Mostramos el logo en el menú
     try:
         st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     except:
@@ -128,11 +131,11 @@ with st.sidebar:
                 mime="text/csv"
             )
 
-# --- LÓGICA DE PÁGINAS ---
+# --- LÓGICA ---
 if menu == "📂 CARGAR":
     st.title("📂 Nueva Propiedad")
     with st.form("carga", clear_on_submit=True):
-        t = st.text_input("Título de la Propiedad")
+        t = st.text_input("Título")
         p = st.text_input("Precio USD")
         d = st.text_area("Descripción")
         l = st.text_input("Link de Drive")

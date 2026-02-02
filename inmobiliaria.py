@@ -22,7 +22,6 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIONES DE APOYO ---
 def formato_precio(valor):
     try:
         s_valor = str(valor).split('.')[0]
@@ -55,11 +54,13 @@ def crear_flyer(foto_subida, titulo, precio):
     img.save(buf, format="PNG")
     return buf.getvalue()
 
-# --- FUNCIÓN PDF (RESTAURADA CON REDES) ---
+# --- FUNCIÓN PDF (OPTIMIZADA PARA 1 SOLA HOJA) ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
     pdf.add_page()
+    
+    # Logo Superior
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
         res = requests.get(url_logo, timeout=10)
@@ -67,22 +68,27 @@ def crear_pdf(titulo, precio, fecha, desc):
         pdf.image("temp_logo.png", x=75, y=10, w=60)
     except: pass
 
-    pdf.ln(45)
+    pdf.ln(35) # Espacio reducido para que entre todo
     pdf.set_font("Arial", 'B', 20)
-    pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
-    pdf.ln(5)
+    pdf.cell(0, 12, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
+    pdf.ln(3)
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt=f"VALOR: USD {precio_lindo}", ln=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
-    pdf.ln(10)
+    pdf.set_font("Arial", '', 9)
+    pdf.cell(0, 5, txt=f"Publicado el: {fecha}", ln=True)
+    pdf.ln(5)
     pdf.set_font("Arial", '', 11)
-    pdf.multi_cell(0, 7, txt=desc)
+    pdf.multi_cell(0, 6, txt=desc)
     
-    # Redes Sociales al pie
-    pdf.set_y(-50)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
+    # QR Code
+    qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
+    qr.save("temp_qr.png")
+    pdf.image("temp_qr.png", x=160, y=pdf.get_y() + 5, w=30)
+
+    # Redes Sociales al pie (Fijado al final de la página 1)
+    pdf.set_y(250) 
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 8, txt="CONTACTO:", ln=True, border='T')
     
     iconos = {
         "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
@@ -90,16 +96,19 @@ def crear_pdf(titulo, precio, fecha, desc):
         "tk": "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
     }
     
-    y_p = pdf.get_y() + 2
-    # WhatsApp
-    pdf.set_xy(17, y_p)
-    pdf.cell(0, 5, txt="WhatsApp: 5493513083986", ln=True)
-    # Instagram
-    pdf.set_xy(17, y_p + 7)
-    pdf.cell(0, 5, txt="Instagram: @cortes.inmo", ln=True)
-    # TikTok
-    pdf.set_xy(17, y_p + 14)
-    pdf.cell(0, 5, txt="TikTok: @cortes.inmobiliaria", ln=True)
+    def agregar_red(icono_url, texto, y_pos):
+        try:
+            r = requests.get(icono_url)
+            with open("temp_icon.png", "wb") as f: f.write(r.content)
+            pdf.image("temp_icon.png", x=10, y=y_pos, w=5)
+        except: pass
+        pdf.set_xy(17, y_pos + 0.5)
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 5, txt=texto, ln=True)
+
+    agregar_red(iconos["ws"], "WhatsApp: 5493513083986", 260)
+    agregar_red(iconos["ig"], "Instagram: @cortes.inmo", 267)
+    agregar_red(iconos["tk"], "TikTok: @cortes.inmobiliaria", 274)
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -119,7 +128,7 @@ with st.sidebar:
 
 df = pd.read_csv(DB_FILE)
 
-# --- LÓGICA DE CARGA / EDICIÓN ---
+# --- LÓGICA CARGAR / EDITAR ---
 if menu == "📂 CARGAR" or st.session_state.edit_id:
     if st.session_state.edit_id:
         st.title("📝 Editar Propiedad")
@@ -145,19 +154,18 @@ if menu == "📂 CARGAR" or st.session_state.edit_id:
             df.to_csv(DB_FILE, index=False)
             st.success("¡Guardado!")
             st.rerun()
-    if st.session_state.edit_id and st.button("Cancelar"):
-        st.session_state.edit_id = None
-        st.rerun()
 
 elif menu == "🎨 DISEÑADOR FLYER":
     st.title("🎨 Creador de Flyers")
-    prop = st.selectbox("Seleccioná la propiedad:", df['Titulo'].tolist())
-    foto = st.file_uploader("Subí una foto:", type=['jpg', 'png', 'jpeg'])
-    if foto and st.button("Generar Flyer"):
-        d_f = df[df['Titulo'] == prop].iloc[0]
-        f_img = crear_flyer(foto, d_f['Titulo'], d_f['Precio'])
-        st.image(f_img)
-        st.download_button("Descargar Flyer", f_img, file_name="flyer.png")
+    if not df.empty:
+        prop = st.selectbox("Seleccioná la propiedad:", df['Titulo'].tolist())
+        foto = st.file_uploader("Subí una foto:", type=['jpg', 'png', 'jpeg'])
+        if foto and st.button("Generar Flyer"):
+            d_f = df[df['Titulo'] == prop].iloc[0]
+            f_img = crear_flyer(foto, d_f['Titulo'], d_f['Precio'])
+            st.image(f_img)
+            st.download_button("Descargar Flyer", f_img, file_name="flyer_cortes.png")
+    else: st.warning("Cargá una propiedad primero.")
 
 else:
     st.title("🖼️ Portfolio")
@@ -171,7 +179,7 @@ else:
             with c2:
                 lk = str(row['LinkDrive']).strip()
                 if lk and lk != "nan" and "http" in lk:
-                    st.markdown(f'<a href="{lk}" target="_blank"><button style="width:100%; height:3em; border-radius:10px; border:1px solid #ccc; cursor:pointer;">📂 DRIVE</button></a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{lk}" target="_blank"><button style="width:100%; height:3em; border-radius:10px; border:1px solid #ccc; cursor:pointer; background:#f8f9fa;">📂 DRIVE</button></a>', unsafe_allow_html=True)
                 else: st.button("📂 SIN LINK", disabled=True, key=f"no_{row['ID']}")
             with c3:
                 if st.button("📝", key=f"ed_{row['ID']}"):
@@ -179,5 +187,6 @@ else:
                     st.rerun()
             with c4:
                 if st.button("🗑️", key=f"dl_{row['ID']}"):
-                    df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
+                    df = df[df['ID'] != row['ID']]
+                    df.to_csv(DB_FILE, index=False)
                     st.rerun()

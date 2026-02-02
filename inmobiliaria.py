@@ -13,7 +13,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTADO DE EDICIÓN (Para saber qué estamos editando) ---
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
@@ -21,8 +20,18 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
+# --- FUNCIÓN PARA FORMATEAR PRECIOS (1500000 -> 1.500.000) ---
+def formato_precio(valor):
+    try:
+        # Quitamos cualquier punto o coma que haya puesto el usuario por error
+        limpio = str(valor).replace(".", "").replace(",", "").strip()
+        return f"{int(limpio):,}".replace(",", ".")
+    except:
+        return valor
+
 # --- FUNCIÓN PDF ---
 def crear_pdf(titulo, precio, fecha, desc):
+    precio_lindo = formato_precio(precio)
     pdf = FPDF()
     pdf.add_page()
     try:
@@ -37,12 +46,11 @@ def crear_pdf(titulo, precio, fecha, desc):
         pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='C')
 
     pdf.ln(45)
-    pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
+    pdf.cell(0, 10, txt=f"VALOR: USD {precio_lindo}", ln=True)
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
     pdf.ln(10)
@@ -61,28 +69,13 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.set_y(-60)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
+    
+    # Datos de contacto directos para evitar errores de descarga de iconos
+    pdf.set_font("Arial", '', 10)
     pdf.ln(2)
-
-    iconos = {
-        "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
-        "ig": "https://cdn-icons-png.flaticon.com/512/174/174855.png",
-        "tk": "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
-    }
-
-    def agregar_linea_contacto(tipo, texto, y_pos):
-        try:
-            r = requests.get(iconos[tipo], timeout=10)
-            with open(f"icon_{tipo}.png", "wb") as f: f.write(r.content)
-            pdf.image(f"icon_{tipo}.png", x=10, y=y_pos, w=5)
-        except: pass
-        pdf.set_xy(17, y_pos + 0.5)
-        pdf.set_font("Arial", '', 10)
-        pdf.cell(0, 5, txt=texto, ln=True)
-
-    y_pos = pdf.get_y() + 2
-    agregar_linea_contacto("ws", "WhatsApp: +54 9 351 308-3986", y_pos)
-    agregar_linea_contacto("ig", "Instagram: @cortes.inmo", y_pos + 8)
-    agregar_linea_contacto("tk", "TikTok: @cortes.inmobiliaria", y_pos + 16)
+    pdf.cell(0, 6, txt="WhatsApp: +54 9 351 308-3986", ln=True)
+    pdf.cell(0, 6, txt="Instagram: @cortes.inmo", ln=True)
+    pdf.cell(0, 6, txt="TikTok: @cortes.inmobiliaria", ln=True)
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -98,7 +91,6 @@ st.markdown("""
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
-    # Si estamos editando, forzamos a que el menú muestre "CARGAR"
     idx_menu = 0 if st.session_state.edit_id is not None else 1
     menu = st.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"], index=idx_menu)
     st.divider()
@@ -112,37 +104,30 @@ df = pd.read_csv(DB_FILE)
 if menu == "📂 CARGAR":
     if st.session_state.edit_id is not None:
         st.title("📝 Editar Propiedad")
-        # Buscamos los datos de la propiedad a editar
-        fila_editar = df[df['ID'] == st.session_state.edit_id].iloc[0]
-        titulo_def = fila_editar['Titulo']
-        precio_def = fila_editar['Precio']
-        desc_def = fila_editar['Descripcion']
-        link_def = fila_editar['LinkDrive']
+        fila = df[df['ID'] == st.session_state.edit_id].iloc[0]
+        v_t, v_p, v_d, v_l = fila['Titulo'], fila['Precio'], fila['Descripcion'], fila['LinkDrive']
     else:
         st.title("📂 Nueva Propiedad")
-        titulo_def, precio_def, desc_def, link_def = "", "", "", ""
+        v_t, v_p, v_d, v_l = "", "", "", ""
 
     with st.form("form_carga", clear_on_submit=True):
-        t = st.text_input("Título", value=titulo_def)
-        p = st.text_input("Precio USD", value=str(precio_def))
-        d = st.text_area("Descripción", value=desc_def)
-        l = st.text_input("Link de Drive", value=str(link_def) if str(link_def) != "nan" else "")
+        t = st.text_input("Título", value=v_t)
+        p = st.text_input("Precio USD (Escribí solo números, ej: 1500000)", value=str(v_p))
+        d = st.text_area("Descripción", value=v_d)
+        l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         
-        btn_label = "💾 GUARDAR CAMBIOS" if st.session_state.edit_id is not None else "🚀 GUARDAR"
-        if st.form_submit_button(btn_label):
+        if st.form_submit_button("💾 GUARDAR"):
             if t and p:
+                # Guardamos el número limpio para no tener problemas de cálculos
+                p_limpio = str(p).replace(".", "").replace(",", "").strip()
                 if st.session_state.edit_id is not None:
-                    # EDITAR EXISTENTE
-                    df.loc[df['ID'] == st.session_state.edit_id, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p, d, l]
-                    st.session_state.edit_id = None # Limpiamos el modo edición
+                    df.loc[df['ID'] == st.session_state.edit_id, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_limpio, d, l]
+                    st.session_state.edit_id = None
                 else:
-                    # NUEVA FILA
-                    nuevo_id = datetime.now().timestamp()
-                    nueva_fila = pd.DataFrame([[nuevo_id, datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], columns=df.columns)
-                    df = pd.concat([df, nueva_fila], ignore_index=True)
-                
+                    nueva = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p_limpio, d, l]], columns=df.columns)
+                    df = pd.concat([df, nueva], ignore_index=True)
                 df.to_csv(DB_FILE, index=False)
-                st.success("¡Operación exitosa!")
+                st.success("¡Guardado con éxito!")
                 st.rerun()
 
     if st.session_state.edit_id is not None:
@@ -156,19 +141,21 @@ else:
     if not df.empty:
         for _, row in df.iloc[::-1].iterrows():
             with st.container():
-                st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {row["Precio"]}</h4></div>', unsafe_allow_html=True)
+                precio_mostrar = formato_precio(row['Precio'])
+                st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {precio_mostrar}</h4></div>', unsafe_allow_html=True)
+                
                 c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
                 with c1:
                     pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                    st.download_button("📄 ENVIAR FICHA", pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
+                    st.download_button("📄 ENVIAR FICHA", pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"p_{row['ID']}")
                 with c2:
-                    link_valido = str(row['LinkDrive']).strip()
-                    if link_valido and link_valido != "nan" and link_valido.startswith("http"):
-                        st.link_button("📂 DRIVE", link_valido)
+                    link = str(row['LinkDrive']).strip()
+                    if link and link != "nan" and link.startswith("http"):
+                        st.link_button("📂 DRIVE", link)
                     else:
-                        st.button("📂 SIN LINK", disabled=True, key=f"dr_{row['ID']}")
+                        st.button("📂 SIN LINK", disabled=True, key=f"d_{row['ID']}")
                 with c3:
-                    if st.button("📝", key=f"edit_{row['ID']}"):
+                    if st.button("📝", key=f"ed_{row['ID']}"):
                         st.session_state.edit_id = row['ID']
                         st.rerun()
                 with c4:

@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estado de edición (Para que la app sepa si estás creando una nueva o editando)
+# Estado de edición
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
@@ -23,7 +23,6 @@ if not os.path.exists(DB_FILE):
 
 # --- FUNCIÓN PDF ---
 def crear_pdf(titulo, precio, fecha, desc):
-    # Formatear el precio para el PDF con puntos de mil
     try:
         p_limpio = str(precio).replace(".", "").replace(",", "")
         p_formateado = f"{int(p_limpio):,}".replace(",", ".")
@@ -58,7 +57,6 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(15)
     
-    # QR
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
@@ -67,7 +65,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ WEB (CSS ORIGINAL) ---
+# --- ESTILOS CSS ---
 st.markdown("""
     <style>
     div.stDownloadButton > button {
@@ -80,55 +78,90 @@ st.markdown("""
         border: none;
     }
     .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
-    [data-testid="stSidebar"] { background-color: #f8f9fa; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- MENÚ LATERAL ---
 with st.sidebar:
-    try:
-        st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
-    except:
-        st.title("🏡 CORTÉS INMO")
-    
+    st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
-    # Si estamos editando, forzamos a mostrar la pestaña de CARGA
     idx_menu = 0 if st.session_state.edit_id is not None else 1
     menu = st.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"], index=idx_menu)
-    
     st.divider()
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "rb") as f:
-            st.download_button(label="💾 COPIA DE SEGURIDAD", data=f, file_name="Respaldo.csv", mime="text/csv")
+            st.download_button("💾 COPIA DE SEGURIDAD", f, file_name="Respaldo.csv")
 
-# Carga de datos
 df = pd.read_csv(DB_FILE)
 
-# --- LÓGICA DE CARGA Y EDICIÓN ---
+# --- SECCIÓN CARGAR / EDITAR ---
 if menu == "📂 CARGAR":
-    edit_id = st.session_state.edit_id
-    
-    if edit_id is not None:
+    eid = st.session_state.edit_id
+    if eid is not None:
         st.title("📝 Editar Propiedad")
-        fila = df[df['ID'] == edit_id].iloc[0]
+        fila = df[df['ID'] == eid].iloc[0]
         v_t, v_p, v_d, v_l = fila['Titulo'], fila['Precio'], fila['Descripcion'], fila['LinkDrive']
     else:
         st.title("📂 Nueva Propiedad")
         v_t, v_p, v_d, v_l = "", "", "", ""
 
-    with st.form("carga", clear_on_submit=True):
+    with st.form("form_carga", clear_on_submit=True):
         t = st.text_input("Título", value=v_t)
-        p = st.text_input("Precio USD (Escribí solo números, ej: 1500000)", value=str(v_p))
+        p = st.text_input("Precio USD (Solo números)", value=str(v_p))
         d = st.text_area("Descripción", value=v_d)
         l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         
-        btn_label = "🚀 ACTUALIZAR" if edit_id is not None else "🚀 GUARDAR"
-        if st.form_submit_button(btn_label):
+        submit = st.form_submit_button("🚀 GUARDAR")
+        if submit:
             if t and p:
-                # Limpiamos el precio de puntos para guardarlo puro
-                p_limpio = p.replace(".", "").replace(",", "").strip()
+                p_clean = p.replace(".", "").replace(",", "").strip()
+                if eid is not None:
+                    df.loc[df['ID'] == eid, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_clean, d, l]
+                    st.session_state.edit_id = None
+                else:
+                    new_id = datetime.now().timestamp()
+                    new_row = pd.DataFrame([[new_id, datetime.now().strftime("%d/%m/%Y"), t, p_clean, d, l]], columns=df.columns)
+                    df = pd.concat([df, new_row], ignore_index=True)
+                df.to_csv(DB_FILE, index=False)
+                st.success("¡Guardado correctamente!")
+                st.rerun()
+
+    if eid is not None:
+        if st.button("❌ Cancelar Edición"):
+            st.session_state.edit_id = None
+            st.rerun()
+
+# --- SECCIÓN PORTFOLIO ---
+else:
+    st.title("🖼️ Portfolio Personal")
+    if df.empty:
+        st.info("No hay propiedades cargadas.")
+    else:
+        for i, row in df.iloc[::-1].iterrows():
+            with st.container():
+                try:
+                    p_val = float(str(row['Precio']).replace(".", "").replace(",", ""))
+                    p_txt = f"{int(p_val):,}".replace(",", ".")
+                except: p_txt = row['Precio']
+
+                st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {p_txt}</h4></div>', unsafe_allow_html=True)
                 
-                if edit_id is not None:
-                    # Actualizar
-                    df.loc[df['ID'] == edit_id, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_limpio, d, l]
-                    st.session_state.edit_id =
+                c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
+                with c1:
+                    pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"p_{row['ID']}")
+                with c2:
+                    link = str(row['LinkDrive']).strip()
+                    if link and link != "nan" and link.startswith("http"):
+                        st.link_button("📂 DRIVE", link, key=f"d_{row['ID']}")
+                    else:
+                        st.button("📂 SIN LINK", disabled=True, key=f"nl_{row['ID']}")
+                with c3:
+                    if st.button("📝", key=f"e_{row['ID']}"):
+                        st.session_state.edit_id = row['ID']
+                        st.rerun()
+                with c4:
+                    if st.button("🗑️", key=f"x_{row['ID']}"):
+                        df = df[df['ID'] != row['ID']]
+                        df.to_csv(DB_FILE, index=False)
+                        st.rerun()

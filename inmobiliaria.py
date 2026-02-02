@@ -31,36 +31,13 @@ def formato_precio(valor):
     except:
         return str(valor)
 
-# --- FUNCIÓN FLYER ---
-def crear_flyer(foto_subida, titulo, precio):
-    img = Image.open(foto_subida).convert("RGB")
-    img = img.resize((1080, 1080), Image.Resampling.LANCZOS)
-    draw = ImageDraw.Draw(img)
-    overlay = Image.new('RGBA', (1080, 1080), (0,0,0,0))
-    draw_ov = ImageDraw.Draw(overlay)
-    draw_ov.rectangle([0, 800, 1080, 1080], fill=(0, 0, 0, 160))
-    img.paste(overlay, (0,0), overlay)
-    try:
-        url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
-        res = requests.get(url_logo)
-        logo = Image.open(BytesIO(res.content)).convert("RGBA")
-        logo.thumbnail((250, 250))
-        img.paste(logo, (40, 40), logo)
-    except: pass
-    draw.text((50, 850), titulo.upper(), fill="white")
-    draw.text((50, 930), f"USD {formato_precio(precio)}", fill="#FFD700")
-    draw.text((50, 1010), "CONTACTO: 5493513083986", fill="white")
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
-
-# --- FUNCIÓN PDF (OPTIMIZADA PARA 1 SOLA HOJA) ---
+# --- FUNCIÓN PDF MEJORADA ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
     pdf.add_page()
     
-    # Logo Superior
+    # 1. Logo Principal
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
         res = requests.get(url_logo, timeout=10)
@@ -68,27 +45,42 @@ def crear_pdf(titulo, precio, fecha, desc):
         pdf.image("temp_logo.png", x=75, y=10, w=60)
     except: pass
 
-    pdf.ln(35) # Espacio reducido para que entre todo
+    pdf.ln(40)
+    
+    # 2. Título y Precio
     pdf.set_font("Arial", 'B', 20)
-    pdf.cell(0, 12, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
-    pdf.ln(3)
+    pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
+    pdf.ln(5)
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt=f"VALOR: USD {precio_lindo}", ln=True)
-    pdf.set_font("Arial", '', 9)
-    pdf.cell(0, 5, txt=f"Publicado el: {fecha}", ln=True)
+    pdf.set_font("Arial", 'I', 9)
+    pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
     pdf.ln(5)
-    pdf.set_font("Arial", '', 11)
-    pdf.multi_cell(0, 6, txt=desc)
     
-    # QR Code
-    qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
-    qr.save("temp_qr.png")
-    pdf.image("temp_qr.png", x=160, y=pdf.get_y() + 5, w=30)
+    # 3. Descripción y QR (Lado a lado)
+    y_antes_desc = pdf.get_y()
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
+    pdf.set_font("Arial", '', 11)
+    # Columna izquierda para descripción (ancho 130)
+    pdf.multi_cell(130, 7, txt=desc)
+    
+    # Columna derecha para QR
+    try:
+        qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
+        qr.save("temp_qr.png")
+        pdf.image("temp_qr.png", x=150, y=y_antes_desc + 5, w=40)
+        pdf.set_xy(150, y_antes_desc + 45)
+        pdf.set_font("Arial", 'B', 7)
+        pdf.cell(40, 5, txt="ESCANEÁ PARA VER MÁS", ln=True, align='C')
+        pdf.set_x(150)
+        pdf.cell(40, 5, txt="EN REDES", ln=True, align='C')
+    except: pass
 
-    # Redes Sociales al pie (Fijado al final de la página 1)
-    pdf.set_y(250) 
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 8, txt="CONTACTO:", ln=True, border='T')
+    # 4. Contacto (Pie de página fijo)
+    pdf.set_y(250)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
     
     iconos = {
         "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
@@ -96,39 +88,40 @@ def crear_pdf(titulo, precio, fecha, desc):
         "tk": "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
     }
     
-    def agregar_red(icono_url, texto, y_pos):
+    redes_info = [
+        ("ws", "WhatsApp: +54 9 351 308-3986", 260),
+        ("ig", "Instagram: @cortes.inmo", 267),
+        ("tk", "TikTok: @cortes.inmobiliaria", 274)
+    ]
+
+    for key, texto, y_pos in redes_info:
         try:
-            r = requests.get(icono_url)
-            with open("temp_icon.png", "wb") as f: f.write(r.content)
-            pdf.image("temp_icon.png", x=10, y=y_pos, w=5)
+            r = requests.get(iconos[key])
+            with open(f"temp_{key}.png", "wb") as f: f.write(r.content)
+            pdf.image(f"temp_{key}.png", x=10, y=y_pos, w=5)
         except: pass
         pdf.set_xy(17, y_pos + 0.5)
         pdf.set_font("Arial", '', 10)
         pdf.cell(0, 5, txt=texto, ln=True)
-
-    agregar_red(iconos["ws"], "WhatsApp: 5493513083986", 260)
-    agregar_red(iconos["ig"], "Instagram: @cortes.inmo", 267)
-    agregar_red(iconos["tk"], "TikTok: @cortes.inmobiliaria", 274)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- ESTILOS ---
+# --- LÓGICA DE LA APP (ESTILOS Y MENÚ) ---
 st.markdown("""
     <style>
-    div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3.5em; border: none; }
+    div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3em; border: none; }
     .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
-    menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
+    menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "📂 CARGAR"])
 
 df = pd.read_csv(DB_FILE)
 
-# --- LÓGICA CARGAR / EDITAR ---
+# --- CARGAR / EDITAR ---
 if menu == "📂 CARGAR" or st.session_state.edit_id:
     if st.session_state.edit_id:
         st.title("📝 Editar Propiedad")
@@ -155,20 +148,9 @@ if menu == "📂 CARGAR" or st.session_state.edit_id:
             st.success("¡Guardado!")
             st.rerun()
 
-elif menu == "🎨 DISEÑADOR FLYER":
-    st.title("🎨 Creador de Flyers")
-    if not df.empty:
-        prop = st.selectbox("Seleccioná la propiedad:", df['Titulo'].tolist())
-        foto = st.file_uploader("Subí una foto:", type=['jpg', 'png', 'jpeg'])
-        if foto and st.button("Generar Flyer"):
-            d_f = df[df['Titulo'] == prop].iloc[0]
-            f_img = crear_flyer(foto, d_f['Titulo'], d_f['Precio'])
-            st.image(f_img)
-            st.download_button("Descargar Flyer", f_img, file_name="flyer_cortes.png")
-    else: st.warning("Cargá una propiedad primero.")
-
+# --- PORTFOLIO ---
 else:
-    st.title("🖼️ Portfolio")
+    st.title("🖼️ Portfolio Personal")
     for i, row in df.iloc[::-1].iterrows():
         with st.container():
             st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {formato_precio(row["Precio"])}</h4></div>', unsafe_allow_html=True)

@@ -13,7 +13,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estado de edición
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
@@ -21,18 +20,14 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN PRECIO (Blindada) ---
 def formato_precio(valor):
     try:
-        # Quitamos todo lo que no sea número
         limpio = "".join(filter(str.isdigit, str(valor)))
         if not limpio: return "0"
-        # Formateamos con puntos de miles (ej: 42500 -> 42.500)
         return f"{int(limpio):,}".replace(",", ".")
     except:
         return str(valor)
 
-# --- FUNCIÓN PDF ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
@@ -92,7 +87,6 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- ESTILOS ---
 st.markdown("""
     <style>
     div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3.5em; border: none; }
@@ -100,7 +94,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
@@ -109,7 +102,6 @@ with st.sidebar:
 
 df = pd.read_csv(DB_FILE)
 
-# --- CARGAR / EDITAR ---
 if menu == "📂 CARGAR":
     if st.session_state.edit_id:
         st.title("📝 Editar Propiedad")
@@ -137,9 +129,11 @@ if menu == "📂 CARGAR":
                 st.success("¡Guardado!")
                 st.rerun()
 
-# --- PORTFOLIO ---
 else:
     st.title("🖼️ Portfolio Personal")
+    # Limpiamos el DataFrame de posibles errores de carga previos
+    df['Precio'] = df['Precio'].fillna(0)
+    
     for idx_row, row in df.iloc[::-1].iterrows():
         with st.container():
             p_display = formato_precio(row['Precio'])
@@ -148,16 +142,20 @@ else:
             c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
             
             with c1:
-                pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
+                try:
+                    pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
+                except:
+                    st.error("Error en PDF")
             
             with c2:
-                # --- SOLUCIÓN DEFINITIVA PARA EL ERROR ROJO ---
-                link_limpio = str(row['LinkDrive']).strip()
-                if link_limpio.startswith("http"):
-                    st.link_button("📂 DRIVE", link_limpio, key=f"lk_{row['ID']}")
+                # --- CAMBIO CLAVE: YA NO USAMOS EL LINK_BUTTON QUE FALLA ---
+                raw_link = str(row['LinkDrive']).strip()
+                if raw_link and raw_link != "nan" and "http" in raw_link:
+                    # Usamos un botón con HTML para abrir el link sin que Streamlit se queje
+                    link_html = f'<a href="{raw_link}" target="_blank" style="text-decoration: none;"><button style="width: 100%; height: 3em; border-radius: 10px; border: 1px solid #ccc; cursor: pointer;">📂 DRIVE</button></a>'
+                    st.markdown(link_html, unsafe_allow_html=True)
                 else:
-                    # Si el link es malo, ponemos un botón normal deshabilitado
                     st.button("📂 SIN LINK", disabled=True, key=f"no_{row['ID']}")
             
             with c3:

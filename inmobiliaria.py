@@ -6,14 +6,14 @@ from fpdf import FPDF
 import requests
 import qrcode
 
-# --- CONFIGURACIÓN DE LA APP ---
+# --- CONFIGURACIÓN ---
 st.set_page_config(
     page_title="Cortés Inmobiliaria",
     page_icon="https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png",
     layout="wide"
 )
 
-# Estado de sesión para la edición (Fundamental para que no de error)
+# Estado para la edición
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
@@ -21,7 +21,7 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN PDF (Mantenemos tu lógica de ficha) ---
+# --- FUNCIÓN PDF ---
 def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
@@ -54,7 +54,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.multi_cell(0, 7, txt=desc)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- ESTILOS CSS (Tus botones originales) ---
+# --- ESTILOS ---
 st.markdown("""
     <style>
     div.stDownloadButton > button {
@@ -81,10 +81,9 @@ with st.sidebar:
         with open(DB_FILE, "rb") as f:
             st.download_button("💾 COPIA DE SEGURIDAD", f, file_name="Respaldo.csv")
 
-# --- CARGA DE DATOS ---
+# --- LÓGICA ---
 df = pd.read_csv(DB_FILE)
 
-# --- PÁGINA CARGAR / EDITAR ---
 if menu == "📂 CARGAR":
     eid = st.session_state.edit_id
     if eid is not None:
@@ -97,8 +96,7 @@ if menu == "📂 CARGAR":
 
     with st.form("form_inmo", clear_on_submit=True):
         t = st.text_input("Título", value=v_t)
-        # Soporta millones: Se escribe sin puntos, ej: 1500000
-        p = st.text_input("Precio USD", value=str(v_p))
+        p = st.text_input("Precio USD (Escribir solo números)", value=str(v_p))
         d = st.text_area("Descripción", value=v_d)
         l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         
@@ -112,10 +110,14 @@ if menu == "📂 CARGAR":
                     new_row = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p_clean, d, l]], columns=df.columns)
                     df = pd.concat([df, new_row], ignore_index=True)
                 df.to_csv(DB_FILE, index=False)
-                st.success("Propiedad gestionada!")
+                st.success("Propiedad guardada con éxito!")
                 st.rerun()
 
-# --- PÁGINA PORTFOLIO ---
+    if eid is not None:
+        if st.button("❌ Cancelar Edición"):
+            st.session_state.edit_id = None
+            st.rerun()
+
 else:
     st.title("🖼️ Portfolio Personal")
     if df.empty:
@@ -123,7 +125,6 @@ else:
     else:
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
-                # Formato visual: 1.500.000
                 try:
                     p_num = float(str(row['Precio']).replace(".", "").replace(",", ""))
                     p_disp = f"{p_num:,.0f}".replace(",", ".")
@@ -136,7 +137,6 @@ else:
                     pdf = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
                     st.download_button("📄 ENVIAR FICHA", data=pdf, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"p_{row['ID']}")
                 with c2:
-                    # BLINDAJE CONTRA EL ERROR TypeERROR:
                     link = str(row['LinkDrive']).strip()
                     if link and link != "nan" and link.startswith("http"):
                         st.link_button("📂 DRIVE", link, key=f"d_{row['ID']}")

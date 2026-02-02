@@ -1,84 +1,168 @@
 import streamlit as st
+import pandas as pd
+from datetime import datetime
+import os
+from fpdf import FPDF
+import requests
+import qrcode
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Cortes Inmobiliaria", layout="wide")
+# --- CONFIGURACIÓN DE LA APP (AQUÍ DEFINIMOS EL ICONO PARA EL CELU) ---
+st.set_page_config(
+    page_title="Cortés Inmobiliaria",
+    page_icon="https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", # Este es tu logo
+    layout="wide"
+)
 
-# Inicialización de estados
-if 'propiedades' not in st.session_state:
-    st.session_state.propiedades = []
-if 'edit_index' not in st.session_state:
-    st.session_state.edit_index = None
+DB_FILE = "db_inmuebles_v5.csv"
+if not os.path.exists(DB_FILE):
+    pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- BARRA LATERAL (LOGO Y NAVEGACIÓN) ---
+# --- FUNCIÓN PDF ---
+def crear_pdf(titulo, precio, fecha, desc):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # 1. LOGO PRINCIPAL CENTRADO
+    try:
+        url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
+        res = requests.get(url_logo, timeout=10)
+        if res.status_code == 200:
+            with open("temp_logo.png", "wb") as f: f.write(res.content)
+            pdf.image("temp_logo.png", x=75, y=10, w=60)
+    except:
+        pdf.set_font("Arial", 'B', 16)
+        pdf.set_xy(10, 20)
+        pdf.cell(0, 10, txt="CORTÉS INMOBILIARIA", ln=True, align='C')
+
+    pdf.ln(45)
+    
+    # 2. CUERPO DE LA FICHA
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
+    pdf.set_font("Arial", '', 11)
+    pdf.multi_cell(0, 7, txt=desc)
+    pdf.ln(15)
+    
+    # 3. QR A REDES
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
+    qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
+    qr.save("temp_qr.png")
+    pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
+    
+    # 4. SECCIÓN CONTACTO
+    pdf.set_y(-60)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
+    pdf.ln(2)
+
+    iconos = {
+        "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
+        "ig": "https://cdn-icons-png.flaticon.com/512/174/174855.png",
+        "tk": "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
+    }
+
+    def agregar_linea_contacto(tipo, texto, y_pos):
+        try:
+            r = requests.get(iconos[tipo], timeout=10)
+            with open(f"icon_{tipo}.png", "wb") as f: f.write(r.content)
+            pdf.image(f"icon_{tipo}.png", x=10, y=y_pos, w=5)
+        except: pass
+        pdf.set_xy(17, y_pos + 0.5)
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 5, txt=texto, ln=True)
+
+    y_pos = pdf.get_y() + 2
+    agregar_linea_contacto("ws", "WhatsApp: +54 9 351 308-3986", y_pos)
+    agregar_linea_contacto("ig", "Instagram: @cortes.inmo", y_pos + 8)
+    agregar_linea_contacto("tk", "TikTok: @cortes.inmobiliaria", y_pos + 16)
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- INTERFAZ WEB ---
+st.markdown("""
+    <style>
+    div.stDownloadButton > button {
+        background-color: #28a745 !important;
+        color: white !important;
+        border-radius: 10px;
+        font-weight: bold;
+        width: 100%;
+        height: 3.5em;
+        border: none;
+    }
+    div.stDownloadButton > button:hover {
+        background-color: #218838 !important;
+    }
+    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
+    [data-testid="stSidebar"] { background-color: #f8f9fa; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- MENÚ LATERAL ---
 with st.sidebar:
-    # Usamos una URL de imagen o el nombre de tu archivo local si lo tienes en el repo
-    # st.image("logo.png", width=200) 
-    st.markdown("### 🏠 CORTES INMOBILIARIA") 
-    st.write("---")
+    try:
+        st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
+    except:
+        st.title("🏡 CORTÉS INMO")
     
-    opciones = ["CARGAR", "PORTFOLIO"]
-    # Si estamos editando, forzamos la vista a CARGAR
-    idx_default = 0 if st.session_state.edit_index is not None else 1
-    menu = st.radio("NAVEGACIÓN", opciones, index=idx_default)
+    st.divider()
+    menu = st.radio("NAVEGACIÓN", ["📂 CARGAR", "🖼️ PORTFOLIO"])
     
-    st.write("---")
-    st.button("💾 COPIA DE SEGURIDAD")
+    st.divider()
+    st.subheader("Seguridad")
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "rb") as f:
+            st.download_button(
+                label="💾 COPIA DE SEGURIDAD",
+                data=f,
+                file_name=f"Respaldo_Inmo_{datetime.now().strftime('%d_%m_%Y')}.csv",
+                mime="text/csv"
+            )
 
-# --- LÓGICA DE CARGA Y EDICIÓN ---
-if menu == "CARGAR":
-    st.header("Gestionar Propiedad")
-    
-    index_edit = st.session_state.edit_index
-    es_edicion = index_edit is not None
-    
-    # Datos precargados si es edición
-    datos_previos = st.session_state.propiedades[index_edit] if es_edicion else {"nombre": "", "precio": 0, "drive": ""}
+# --- LÓGICA ---
+if menu == "📂 CARGAR":
+    st.title("📂 Nueva Propiedad")
+    with st.form("carga", clear_on_submit=True):
+        t = st.text_input("Título")
+        p = st.text_input("Precio USD")
+        d = st.text_area("Descripción")
+        l = st.text_input("Link de Drive")
+        if st.form_submit_button("🚀 GUARDAR"):
+            if t and p:
+                df_n = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p, d, l]], 
+                                    columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
+                df_n.to_csv(DB_FILE, mode='a', header=not os.path.exists(DB_FILE), index=False)
+                st.success("¡Propiedad Guardada!")
 
-    with st.form("form_gestion", clear_on_submit=True):
-        nombre = st.text_input("Nombre de la propiedad", value=datos_previos["nombre"])
-        
-        # Soportamos millones: min_value 0, sin decimales (.0)
-        precio = st.number_input("Precio (USD)", value=int(datos_previos["precio"]), step=1000, format="%d")
-        
-        url_drive = st.text_input("Link de carpeta Drive", value=datos_previos["drive"])
-        
-        texto_boton = "ACTUALIZAR" if es_edicion else "GUARDAR PROPIEDAD"
-        if st.form_submit_button(texto_boton):
-            nueva_data = {"nombre": nombre, "precio": precio, "drive": url_drive}
-            
-            if es_edicion:
-                st.session_state.propiedades[index_edit] = nueva_data
-                st.session_state.edit_index = None
-            else:
-                st.session_state.propiedades.append(nueva_data)
-            
-            st.rerun()
-
-    if es_edicion:
-        if st.button("Cancelar Edición"):
-            st.session_state.edit_index = None
-            st.rerun()
-
-# --- PORTFOLIO ---
 else:
     st.title("🖼️ Portfolio Personal")
-    
-    if not st.session_state.propiedades:
-        st.info("No hay propiedades cargadas.")
-    else:
-        for i, prop in enumerate(st.session_state.propiedades):
-            with st.container(border=True):
-                # Formato Argentina: 1.500.000
-                precio_millones = f"{prop['precio']:,}".replace(",", ".")
-                
-                st.subheader(f"🏠 {prop['nombre']}")
-                st.write(f"### USD {precio_millones}")
-                
-                col1, col2, col3, col4 = st.columns([1, 1, 0.2, 0.2])
-                
-                with col1:
-                    st.button("📄 ENVIAR FICHA", key=f"fich_{i}")
-                
-                with col2:
-                    # CORRECCIÓN DE ERROR: Solo mostrar botón si hay link, sino poner texto
-                    if prop['drive'] and
+    if os.path.exists(DB_FILE):
+        df = pd.read_csv(DB_FILE)
+        if df.empty:
+            st.info("No hay propiedades.")
+        else:
+            for _, row in df.iloc[::-1].iterrows():
+                with st.container():
+                    st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {row["Precio"]}</h4></div>', unsafe_allow_html=True)
+                    pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    c1, c2, c3 = st.columns([2, 1, 1])
+                    with c1:
+                        st.download_button(label="📄 ENVIAR FICHA", data=pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf")
+                    with c2:
+                        st.link_button("📂 DRIVE", str(row['LinkDrive']))
+                    with c3:
+                        if st.button("🗑️", key=f"del_{row['ID']}"):
+                            df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
+                            st.rerun()

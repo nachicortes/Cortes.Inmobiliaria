@@ -20,14 +20,19 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
+# --- FUNCIÓN PRECIO (Corregida para que no agregue ceros) ---
 def formato_precio(valor):
     try:
-        limpio = "".join(filter(str.isdigit, str(valor)))
+        # Convertimos a string y quitamos cualquier punto o coma que ya tenga
+        s_valor = str(valor).split('.')[0] # Ignoramos decimales si existieran
+        limpio = "".join(filter(str.isdigit, s_valor))
         if not limpio: return "0"
+        # Formateamos: 4250 -> 4.250
         return f"{int(limpio):,}".replace(",", ".")
     except:
         return str(valor)
 
+# --- FUNCIÓN PDF ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
@@ -87,6 +92,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
+# --- ESTILOS ---
 st.markdown("""
     <style>
     div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3.5em; border: none; }
@@ -94,6 +100,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- MENÚ ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
@@ -102,6 +109,7 @@ with st.sidebar:
 
 df = pd.read_csv(DB_FILE)
 
+# --- CARGAR / EDITAR ---
 if menu == "📂 CARGAR":
     if st.session_state.edit_id:
         st.title("📝 Editar Propiedad")
@@ -113,11 +121,12 @@ if menu == "📂 CARGAR":
 
     with st.form("form_inmo", clear_on_submit=True):
         t = st.text_input("Título", value=v_t)
-        p = st.text_input("Precio USD (Ej: 42500)", value=str(v_p))
+        p = st.text_input("Precio USD (Escribí solo los números)", value=str(v_p).split('.')[0] if str(v_p) != "nan" else "")
         d = st.text_area("Descripción", value=v_d)
         l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         if st.form_submit_button("💾 GUARDAR"):
             if t and p:
+                # Limpieza absoluta: solo números
                 p_c = "".join(filter(str.isdigit, str(p)))
                 if st.session_state.edit_id:
                     df.loc[df['ID'] == st.session_state.edit_id, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_c, d, l]
@@ -129,11 +138,9 @@ if menu == "📂 CARGAR":
                 st.success("¡Guardado!")
                 st.rerun()
 
+# --- PORTFOLIO ---
 else:
     st.title("🖼️ Portfolio Personal")
-    # Limpiamos el DataFrame de posibles errores de carga previos
-    df['Precio'] = df['Precio'].fillna(0)
-    
     for idx_row, row in df.iloc[::-1].iterrows():
         with st.container():
             p_display = formato_precio(row['Precio'])
@@ -142,18 +149,13 @@ else:
             c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
             
             with c1:
-                try:
-                    pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                    st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
-                except:
-                    st.error("Error en PDF")
+                pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
             
             with c2:
-                # --- CAMBIO CLAVE: YA NO USAMOS EL LINK_BUTTON QUE FALLA ---
                 raw_link = str(row['LinkDrive']).strip()
                 if raw_link and raw_link != "nan" and "http" in raw_link:
-                    # Usamos un botón con HTML para abrir el link sin que Streamlit se queje
-                    link_html = f'<a href="{raw_link}" target="_blank" style="text-decoration: none;"><button style="width: 100%; height: 3em; border-radius: 10px; border: 1px solid #ccc; cursor: pointer;">📂 DRIVE</button></a>'
+                    link_html = f'<a href="{raw_link}" target="_blank" style="text-decoration: none;"><button style="width: 100%; height: 3em; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; background: #f8f9fa;">📂 DRIVE</button></a>'
                     st.markdown(link_html, unsafe_allow_html=True)
                 else:
                     st.button("📂 SIN LINK", disabled=True, key=f"no_{row['ID']}")

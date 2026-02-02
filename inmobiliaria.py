@@ -20,24 +20,25 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN DE PRECIO CORREGIDA ---
+# --- FUNCIÓN DE PRECIO DEFINITIVA ---
 def formato_precio(valor):
     try:
-        # Quitamos puntos para normalizar y convertimos a entero
+        # Eliminamos puntos y comas para evitar confusiones de decimales
         limpio = str(valor).replace(".", "").replace(",", "").strip()
-        if not limpio: return "0"
-        # Formateamos con puntos de miles (1234 -> 1.234)
-        return f"{int(limpio):,}".replace(",", ".")
+        # Solo nos quedamos con los números
+        solo_numeros = "".join(filter(str.isdigit, limpio))
+        if not solo_numeros: return "0"
+        # Formateamos con puntos de miles: 42500 -> 42.500
+        return f"{int(solo_numeros):,}".replace(",", ".")
     except:
-        return valor
+        return str(valor)
 
-# --- FUNCIÓN PDF CON LOGOS DE REDES ---
+# --- FUNCIÓN PDF CON LOGOS ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. Logo Principal
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
         res = requests.get(url_logo, timeout=10)
@@ -65,19 +66,18 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.multi_cell(0, 7, txt=desc)
     pdf.ln(10)
     
-    # 2. QR
+    # QR
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # 3. CONTACTO CON LOGOS (RESTAURADO)
+    # Contacto con Logos
     pdf.set_y(-55)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
-    pdf.ln(2)
-
+    
     iconos = {
         "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
         "ig": "https://cdn-icons-png.flaticon.com/512/174/174855.png",
@@ -94,14 +94,14 @@ def crear_pdf(titulo, precio, fecha, desc):
         pdf.set_font("Arial", '', 10)
         pdf.cell(0, 5, txt=texto, ln=True)
 
-    y_pos = pdf.get_y()
+    y_pos = pdf.get_y() + 2
     agregar_linea("ws", "WhatsApp: +54 9 351 308-3986", y_pos)
     agregar_linea("ig", "Instagram: @cortes.inmo", y_pos + 7)
     agregar_linea("tk", "TikTok: @cortes.inmobiliaria", y_pos + 14)
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- ESTILOS CSS ---
+# --- ESTILOS ---
 st.markdown("""
     <style>
     div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3.5em; border: none; }
@@ -109,7 +109,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- MENÚ ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
@@ -135,7 +135,8 @@ if menu == "📂 CARGAR":
         l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         if st.form_submit_button("💾 GUARDAR"):
             if t and p:
-                p_c = str(p).replace(".", "").replace(",", "").strip()
+                # Al guardar, limpiamos el input para que solo queden dígitos
+                p_c = "".join(filter(str.isdigit, str(p)))
                 if st.session_state.edit_id:
                     df.loc[df['ID'] == st.session_state.edit_id, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_c, d, l]
                     st.session_state.edit_id = None
@@ -145,9 +146,6 @@ if menu == "📂 CARGAR":
                 df.to_csv(DB_FILE, index=False)
                 st.success("¡Guardado!")
                 st.rerun()
-    if st.session_state.edit_id and st.button("Cancelar"):
-        st.session_state.edit_id = None
-        st.rerun()
 
 # --- PORTFOLIO ---
 else:
@@ -158,18 +156,21 @@ else:
             st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {p_display}</h4></div>', unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
             with c1:
-                pdf = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                st.download_button("📄 ENVIAR FICHA", pdf, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"p_{row['ID']}")
+                pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"p_{row['ID']}")
             with c2:
+                # Blindaje contra el error rojo de LinkDrive
                 link = str(row['LinkDrive']).strip()
                 if link and link != "nan" and link.startswith("http"):
-                    st.link_button("📂 DRIVE", link)
-                else: st.button("📂 SIN LINK", disabled=True, key=f"d_{row['ID']}")
+                    st.link_button("📂 DRIVE", link, key=f"link_{row['ID']}")
+                else:
+                    st.button("📂 SIN LINK", disabled=True, key=f"nolink_{row['ID']}")
             with c3:
                 if st.button("📝", key=f"e_{row['ID']}"):
                     st.session_state.edit_id = row['ID']
                     st.rerun()
             with c4:
                 if st.button("🗑️", key=f"x_{row['ID']}"):
-                    df[df['ID'] != row['ID']].to_csv(DB_FILE, index=False)
+                    df = df[df['ID'] != row['ID']]
+                    df.to_csv(DB_FILE, index=False)
                     st.rerun()

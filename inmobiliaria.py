@@ -6,7 +6,7 @@ from fpdf import FPDF
 import requests
 import qrcode
 
-# --- CONFIGURACIÓN DE LA APP ---
+# --- CONFIGURACIÓN ---
 st.set_page_config(
     page_title="Cortés Inmobiliaria",
     page_icon="https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png",
@@ -20,7 +20,7 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN PDF (CON REDES RECUPERADAS) ---
+# --- FUNCIÓN PDF (RESTAURADA CON REDES) ---
 def crear_pdf(titulo, precio, fecha, desc):
     try:
         p_limpio = str(precio).replace(".", "").replace(",", "")
@@ -46,4 +46,47 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.ln(45)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
-    pdf.ln(5
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, txt=f"VALOR: USD {p_formateado}", ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
+    pdf.set_font("Arial", '', 11)
+    pdf.multi_cell(0, 7, txt=desc)
+    pdf.ln(10)
+    
+    # QR
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
+    qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
+    qr.save("temp_qr.png")
+    pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
+    
+    # Contacto al pie
+    pdf.set_y(-55)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 6, txt="WhatsApp: +54 9 351 308-3986", ln=True)
+    pdf.cell(0, 6, txt="Instagram: @cortes.inmo", ln=True)
+    pdf.cell(0, 6, txt="TikTok: @cortes.inmobiliaria", ln=True)
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- ESTILOS ---
+st.markdown("""
+    <style>
+    div.stDownloadButton > button {
+        background-color: #28a745 !important;
+        color: white !important;
+        border-radius: 10px;
+        font-weight: bold;
+        width: 100%;
+        height: 3.5em;
+        border: none;
+    }

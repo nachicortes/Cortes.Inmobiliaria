@@ -13,6 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# Estado de edición
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
@@ -20,14 +21,18 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
+# --- FUNCIÓN PRECIO (Blindada) ---
 def formato_precio(valor):
     try:
+        # Quitamos todo lo que no sea número
         limpio = "".join(filter(str.isdigit, str(valor)))
         if not limpio: return "0"
+        # Formateamos con puntos de miles (ej: 42500 -> 42.500)
         return f"{int(limpio):,}".replace(",", ".")
     except:
         return str(valor)
 
+# --- FUNCIÓN PDF ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
@@ -87,6 +92,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
+# --- ESTILOS ---
 st.markdown("""
     <style>
     div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3.5em; border: none; }
@@ -94,6 +100,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- MENÚ ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
@@ -102,6 +109,7 @@ with st.sidebar:
 
 df = pd.read_csv(DB_FILE)
 
+# --- CARGAR / EDITAR ---
 if menu == "📂 CARGAR":
     if st.session_state.edit_id:
         st.title("📝 Editar Propiedad")
@@ -128,11 +136,8 @@ if menu == "📂 CARGAR":
                 df.to_csv(DB_FILE, index=False)
                 st.success("¡Guardado!")
                 st.rerun()
-    if st.session_state.edit_id:
-        if st.button("Cancelar Edición"):
-            st.session_state.edit_id = None
-            st.rerun()
 
+# --- PORTFOLIO ---
 else:
     st.title("🖼️ Portfolio Personal")
     for idx_row, row in df.iloc[::-1].iterrows():
@@ -144,22 +149,24 @@ else:
             
             with c1:
                 pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"btn_pdf_{row['ID']}")
+                st.download_button("📄 ENVIAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
             
             with c2:
-                raw_link = str(row['LinkDrive']).strip()
-                if raw_link and raw_link != "nan" and raw_link.lower().startswith("http"):
-                    st.link_button("📂 DRIVE", raw_link, key=f"btn_link_{row['ID']}")
+                # --- SOLUCIÓN DEFINITIVA PARA EL ERROR ROJO ---
+                link_limpio = str(row['LinkDrive']).strip()
+                if link_limpio.startswith("http"):
+                    st.link_button("📂 DRIVE", link_limpio, key=f"lk_{row['ID']}")
                 else:
-                    st.button("📂 SIN LINK", disabled=True, key=f"btn_no_{row['ID']}")
+                    # Si el link es malo, ponemos un botón normal deshabilitado
+                    st.button("📂 SIN LINK", disabled=True, key=f"no_{row['ID']}")
             
             with c3:
-                if st.button("📝", key=f"btn_ed_{row['ID']}"):
+                if st.button("📝", key=f"ed_{row['ID']}"):
                     st.session_state.edit_id = row['ID']
                     st.rerun()
             
             with c4:
-                if st.button("🗑️", key=f"btn_del_{row['ID']}"):
-                    df_new = df[df['ID'] != row['ID']]
-                    df_new.to_csv(DB_FILE, index=False)
+                if st.button("🗑️", key=f"del_{row['ID']}"):
+                    df = df[df['ID'] != row['ID']]
+                    df.to_csv(DB_FILE, index=False)
                     st.rerun()

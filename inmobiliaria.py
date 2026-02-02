@@ -20,7 +20,7 @@ DB_FILE = "db_inmuebles_v5.csv"
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
 
-# --- FUNCIÓN PDF (RESTAURADA CON REDES) ---
+# --- FUNCIÓN PDF (CON CONTACTO COMPLETO) ---
 def crear_pdf(titulo, precio, fecha, desc):
     try:
         p_limpio = str(precio).replace(".", "").replace(",", "")
@@ -46,7 +46,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.ln(45)
     pdf.set_font("Arial", 'B', 20)
     pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
-    pdf.ln(5)
+    pdf.ln(5) # <--- Paréntesis cerrado correctamente aquí
     
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt=f"VALOR: USD {p_formateado}", ln=True)
@@ -67,7 +67,7 @@ def crear_pdf(titulo, precio, fecha, desc):
     qr.save("temp_qr.png")
     pdf.image("temp_qr.png", x=10, y=pdf.get_y()+2, w=35)
     
-    # Contacto al pie
+    # SECCIÓN CONTACTO (RESTAURADA)
     pdf.set_y(-55)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
@@ -94,7 +94,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ ---
+# --- MENÚ LATERAL ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
@@ -107,7 +107,7 @@ with st.sidebar:
 
 df = pd.read_csv(DB_FILE)
 
-# --- LÓGICA ---
+# --- LÓGICA DE CARGA Y EDICIÓN ---
 if menu == "📂 CARGAR":
     eid = st.session_state.edit_id
     if eid is not None:
@@ -118,13 +118,13 @@ if menu == "📂 CARGAR":
         st.title("📂 Nueva Propiedad")
         v_t, v_p, v_d, v_l = "", "", "", ""
 
-    with st.form("fcarga"):
+    with st.form("form_final"):
         t = st.text_input("Título", value=v_t)
-        p = st.text_input("Precio USD (Escribir números)", value=str(v_p))
+        p = st.text_input("Precio USD (Escribí solo números)", value=str(v_p))
         d = st.text_area("Descripción", value=v_d)
         l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         
-        if st.form_submit_button("🚀 GUARDAR"):
+        if st.form_submit_button("🚀 GUARDAR CAMBIOS"):
             if t and p:
                 p_c = p.replace(".", "").replace(",", "").strip()
                 if eid is not None:
@@ -138,37 +138,42 @@ if menu == "📂 CARGAR":
                 st.rerun()
 
     if eid is not None:
-        if st.button("❌ Cancelar"):
+        if st.button("❌ Cancelar Edición"):
             st.session_state.edit_id = None
             st.rerun()
 
+# --- PORTFOLIO ---
 else:
     st.title("🖼️ Portfolio Personal")
-    for i, row in df.iloc[::-1].iterrows():
-        with st.container():
-            try:
-                p_n = float(str(row['Precio']).replace(".", "").replace(",", ""))
-                p_tx = f"{int(p_n):,}".replace(",", ".")
-            except: p_tx = row['Precio']
+    if df.empty:
+        st.info("No hay propiedades.")
+    else:
+        for i, row in df.iloc[::-1].iterrows():
+            with st.container():
+                try:
+                    p_n = float(str(row['Precio']).replace(".", "").replace(",", ""))
+                    p_tx = f"{int(p_n):,}".replace(",", ".")
+                except: p_tx = row['Precio']
 
-            st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {p_tx}</h4></div>', unsafe_allow_html=True)
-            
-            c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
-            with c1:
-                pdf_b = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                st.download_button("📄 ENVIAR FICHA", pdf_b, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"f_{row['ID']}")
-            with c2:
-                link = str(row['LinkDrive']).strip()
-                if link and link != "nan" and link.startswith("http"):
-                    st.link_button("📂 DRIVE", link, key=f"d_{row['ID']}")
-                else:
-                    st.button("📂 SIN LINK", disabled=True, key=f"s_{row['ID']}")
-            with c3:
-                if st.button("📝", key=f"e_{row['ID']}"):
-                    st.session_state.edit_id = row['ID']
-                    st.rerun()
-            with c4:
-                if st.button("🗑️", key=f"x_{row['ID']}"):
-                    df = df[df['ID'] != row['ID']]
-                    df.to_csv(DB_FILE, index=False)
-                    st.rerun()
+                st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {p_tx}</h4></div>', unsafe_allow_html=True)
+                
+                c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
+                with c1:
+                    pdf_b = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    st.download_button("📄 ENVIAR FICHA", pdf_b, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"f_{row['ID']}")
+                with c2:
+                    link = str(row['LinkDrive']).strip()
+                    # EL ARREGLO PARA EL ERROR ROJO:
+                    if link and link != "nan" and link.startswith("http"):
+                        st.link_button("📂 DRIVE", link, key=f"d_{row['ID']}")
+                    else:
+                        st.button("📂 SIN LINK", disabled=True, key=f"s_{row['ID']}")
+                with c3:
+                    if st.button("📝", key=f"e_{row['ID']}"):
+                        st.session_state.edit_id = row['ID']
+                        st.rerun()
+                with c4:
+                    if st.button("🗑️", key=f"x_{row['ID']}"):
+                        df = df[df['ID'] != row['ID']]
+                        df.to_csv(DB_FILE, index=False)
+                        st.rerun()

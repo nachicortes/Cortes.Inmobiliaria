@@ -15,12 +15,17 @@ st.set_page_config(
     layout="wide"
 )
 
+# Inicialización de estados
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
 DB_FILE = "db_inmuebles_v5.csv"
-if not os.path.exists(DB_FILE):
-    pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"]).to_csv(DB_FILE, index=False)
+
+# --- FUNCIONES DE PERSISTENCIA ---
+def cargar_datos():
+    if os.path.exists(DB_FILE):
+        return pd.read_csv(DB_FILE)
+    return pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
 
 def formato_precio(valor):
     try:
@@ -31,7 +36,7 @@ def formato_precio(valor):
     except:
         return str(valor)
 
-# --- FUNCIÓN FLYER (Usa datos del Portfolio) ---
+# --- FUNCIÓN FLYER ---
 def crear_flyer(foto_subida, titulo, precio):
     img = Image.open(foto_subida).convert("RGB")
     img = img.resize((1080, 1080), Image.Resampling.LANCZOS)
@@ -48,17 +53,16 @@ def crear_flyer(foto_subida, titulo, precio):
     except: pass
     draw.text((50, 780), titulo.upper(), fill="white")
     draw.text((50, 860), f"USD {formato_precio(precio)}", fill="#FFD700")
-    draw.text((50, 950), "WHATSAPP: +54 9 351 308-3986", fill="white")
+    draw.text((50, 950), "CONTACTO: +54 9 351 308-3986", fill="white")
     buf = BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
 
-# --- FUNCIÓN PDF (TODO EN 1 HOJA Y TIKTOK ALINEADO) ---
+# --- FUNCIÓN PDF (LOGOS Y REDES BLINDADOS) ---
 def crear_pdf(titulo, precio, fecha, desc):
     precio_lindo = formato_precio(precio)
     pdf = FPDF()
     pdf.add_page()
-    
     try:
         url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
         res = requests.get(url_logo, timeout=10)
@@ -74,48 +78,39 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.cell(0, 10, txt=f"VALOR: USD {precio_lindo}", ln=True)
     pdf.set_font("Arial", 'I', 9)
     pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
-    
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=desc)
     
-    # QR reubicado para ahorrar espacio
     pdf.ln(5)
-    y_curr = pdf.get_y()
-    if y_curr > 210: pdf.add_page(); y_curr = 20
+    y_qr = pdf.get_y()
+    if y_qr > 210: pdf.add_page(); y_qr = 20
     try:
         qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
         qr.save("temp_qr.png")
-        pdf.image("temp_qr.png", x=10, y=y_curr, w=30)
-        pdf.set_xy(45, y_curr + 12)
+        pdf.image("temp_qr.png", x=10, y=y_qr, w=30)
+        pdf.set_xy(45, y_qr + 12)
         pdf.set_font("Arial", 'B', 10)
-        pdf.cell(0, 5, txt="ESCANEÁ PARA VER MÁS EN REDES", ln=True)
+        pdf.cell(0, 5, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     except: pass
 
-    # CONTACTO (Subido para asegurar 1 sola hoja)
     pdf.set_y(245)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
     
-    iconos = {
-        "ws": "https://cdn-icons-png.flaticon.com/512/733/733585.png",
-        "ig": "https://cdn-icons-png.flaticon.com/512/174/174855.png",
-        "tk": "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
-    }
-    
-    redes_data = [
-        ("ws", "WhatsApp: +54 9 351 308-3986", 255),
-        ("ig", "Instagram: @cortes.inmo", 262),
-        ("tk", "TikTok: @cortes.inmobiliaria", 269) # TikTok ahora más arriba
+    redes = [
+        ("https://cdn-icons-png.flaticon.com/512/733/733585.png", "WhatsApp: +54 9 351 308-3986", 255),
+        ("https://cdn-icons-png.flaticon.com/512/174/174855.png", "Instagram: @cortes.inmo", 262),
+        ("https://cdn-icons-png.flaticon.com/512/3046/3046121.png", "TikTok: @cortes.inmobiliaria", 269)
     ]
 
-    for k, txt, y in redes_data:
+    for url, txt, y in redes:
         try:
-            r = requests.get(iconos[k])
-            with open(f"i_{k}.png", "wb") as f: f.write(r.content)
-            pdf.image(f"i_{k}.png", x=10, y=y, w=5)
+            r = requests.get(url)
+            with open("temp_ico.png", "wb") as f: f.write(r.content)
+            pdf.image("temp_ico.png", x=10, y=y, w=5)
         except: pass
         pdf.set_xy(17, y + 0.5)
         pdf.set_font("Arial", '', 10)
@@ -124,57 +119,31 @@ def crear_pdf(titulo, precio, fecha, desc):
     return pdf.output(dest='S').encode('latin-1')
 
 # --- INTERFAZ ---
-st.markdown("""
-    <style>
-    div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100% !important; height: 3em; border: none; }
-    .card { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
-    </style>
-""", unsafe_allow_html=True)
+st.markdown("<style>div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; }</style>", unsafe_allow_html=True)
+
+df = cargar_datos()
 
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
     menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
+    st.divider()
+    
+    # Botón de Respaldo Permanente
+    st.subheader("💾 Respaldo de Datos")
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 DESCARGAR BASE DE DATOS", csv, "respaldo_cortes.csv", "text/csv")
+    
+    # Subir respaldo si se borró todo
+    archivo_subido = st.file_uploader("Restaurar desde archivo:", type="csv")
+    if archivo_subido:
+        df_subido = pd.read_csv(archivo_subido)
+        df_subido.to_csv(DB_FILE, index=False)
+        st.success("¡Datos restaurados!")
+        st.rerun()
 
-df = pd.read_csv(DB_FILE)
-
-if menu == "🖼️ PORTFOLIO" and not st.session_state.edit_id:
-    st.title("🖼️ Portfolio Personal")
-    for i, row in df.iloc[::-1].iterrows():
-        with st.container():
-            st.markdown(f'<div class="card"><h3>🏠 {row["Titulo"]}</h3><h4>USD {formato_precio(row["Precio"])}</h4></div>', unsafe_allow_html=True)
-            c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
-            with c1:
-                pdf_dat = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                st.download_button("📄 ENVIAR FICHA", pdf_dat, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
-            with c2:
-                lk = str(row['LinkDrive']).strip()
-                if lk and lk != "nan" and "http" in lk:
-                    st.markdown(f'<a href="{lk}" target="_blank"><button style="width:100%; height:3em; border-radius:10px; border:1px solid #ccc; cursor:pointer; background:#f8f9fa;">📂 DRIVE</button></a>', unsafe_allow_html=True)
-                else: st.button("📂 SIN LINK", disabled=True, key=f"no_{row['ID']}")
-            with c3:
-                if st.button("📝", key=f"ed_{row['ID']}"):
-                    st.session_state.edit_id = row['ID']
-                    st.rerun()
-            with c4:
-                if st.button("🗑️", key=f"dl_{row['ID']}"):
-                    df = df[df['ID'] != row['ID']]
-                    df.to_csv(DB_FILE, index=False)
-                    st.rerun()
-
-elif menu == "🎨 DISEÑADOR FLYER":
-    st.title("🎨 Creador de Flyers Profesionales")
-    if not df.empty:
-        prop = st.selectbox("Elegí una propiedad de tu portfolio:", df['Titulo'].tolist())
-        foto = st.file_uploader("Subí una foto para el fondo:", type=['jpg', 'png', 'jpeg'])
-        if foto and st.button("✨ GENERAR FLYER"):
-            d_f = df[df['Titulo'] == prop].iloc[0]
-            f_img = crear_flyer(foto, d_f['Titulo'], d_f['Precio'])
-            st.image(f_img, use_container_width=True)
-            st.download_button("💾 DESCARGAR FLYER", f_img, file_name=f"Flyer_{prop}.png")
-    else: st.warning("Cargá una propiedad primero en la pestaña CARGAR.")
-
-else:
+# --- LÓGICA DE MÓDULOS ---
+if menu == "📂 CARGAR" or st.session_state.edit_id:
     if st.session_state.edit_id:
         st.title("📝 Editar Propiedad")
         f = df[df['ID'] == st.session_state.edit_id].iloc[0]
@@ -185,7 +154,7 @@ else:
 
     with st.form("form_inmo"):
         t = st.text_input("Título", value=v_t)
-        p = st.text_input("Precio USD (Escribí solo números)", value=str(v_p).split('.')[0] if str(v_p) != "nan" else "")
+        p = st.text_input("Precio USD (Hasta 1.000.000+)", value=str(v_p).split('.')[0] if str(v_p) != "nan" else "")
         d = st.text_area("Descripción", value=v_d)
         l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
         if st.form_submit_button("💾 GUARDAR"):
@@ -197,5 +166,35 @@ else:
                 nueva = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p_c, d, l]], columns=df.columns)
                 df = pd.concat([df, nueva])
             df.to_csv(DB_FILE, index=False)
-            st.success("¡Guardado correctamente!")
+            st.success("¡Guardado en base de datos!")
             st.rerun()
+
+elif menu == "🎨 DISEÑADOR FLYER":
+    st.title("🎨 Creador de Flyers")
+    if not df.empty:
+        prop = st.selectbox("Propiedad:", df['Titulo'].tolist())
+        foto = st.file_uploader("Foto de fondo:", type=['jpg', 'png', 'jpeg'])
+        if foto and st.button("✨ GENERAR FLYER"):
+            d_f = df[df['Titulo'] == prop].iloc[0]
+            f_img = crear_flyer(foto, d_f['Titulo'], d_f['Precio'])
+            st.image(f_img); st.download_button("💾 DESCARGAR", f_img, file_name=f"Flyer_{prop}.png")
+    else: st.warning("No hay datos cargados.")
+
+else:
+    st.title("🖼️ Portfolio Personal")
+    for i, row in df.iloc[::-1].iterrows():
+        with st.container():
+            st.markdown(f'<div style="background:white;padding:20px;border-radius:15px;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)"><h3>🏠 {row["Titulo"]}</h3><h4>USD {formato_precio(row["Precio"])}</h4></div>', unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
+            with c1:
+                pdf_dat = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                st.download_button("📄 ENVIAR FICHA", pdf_dat, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
+            with c2:
+                if "http" in str(row['LinkDrive']): st.link_button("📂 DRIVE", str(row['LinkDrive']))
+            with c3:
+                if st.button("📝", key=f"ed_{row['ID']}"):
+                    st.session_state.edit_id = row['ID']; st.rerun()
+            with c4:
+                if st.button("🗑️", key=f"dl_{row['ID']}"):
+                    df = df[df['ID'] != row['ID']]
+                    df.to_csv(DB_FILE, index=False); st.rerun()

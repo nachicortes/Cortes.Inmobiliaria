@@ -15,35 +15,95 @@ st.set_page_config(
     layout="wide"
 )
 
+DB_FILE = "db_inmuebles_v5.csv"
+
 # Inicialización de estados
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
-DB_FILE = "db_inmuebles_v5.csv"
-
-# --- FUNCIONES DE PERSISTENCIA ---
+# --- CARGA DE DATOS ---
 def cargar_datos():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
 
+df = cargar_datos()
+
+# --- BARRA LATERAL (BOTÓN DE CARGA REUBICADO) ---
+with st.sidebar:
+    st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
+    st.divider()
+    
+    # SECCIÓN DE SEGURIDAD (BIEN ARRIBA)
+    st.subheader("💾 Seguridad de Datos")
+    
+    # Botón para subir el archivo (Este es el que buscás)
+    archivo_subido = st.file_uploader("SUBIR RESPALDO (.csv)", type="csv", help="Si se borró todo, subí acá tu archivo guardado.")
+    if archivo_subido:
+        df_restaurado = pd.read_csv(archivo_subido)
+        df_restaurado.to_csv(DB_FILE, index=False)
+        st.success("¡Datos recuperados!")
+        st.rerun()
+
+    # Botón para descargar el archivo
+    csv_data = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 GUARDAR MI BASE ACTUAL", csv_data, "respaldo_cortes.csv", "text/csv")
+    
+    st.divider()
+    menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
+
+# --- FUNCIONES CORE (PDF, FLYER, PRECIO) ---
+
 def formato_precio(valor):
     try:
         s_valor = str(valor).split('.')[0]
         limpio = "".join(filter(str.isdigit, s_valor))
-        if not limpio: return "0"
-        return f"{int(limpio):,}".replace(",", ".")
-    except:
-        return str(valor)
+        return f"{int(limpio):,}".replace(",", ".") if limpio else "0"
+    except: return str(valor)
 
-# --- FUNCIÓN FLYER ---
-def crear_flyer(foto_subida, titulo, precio):
-    img = Image.open(foto_subida).convert("RGB")
-    img = img.resize((1080, 1080), Image.Resampling.LANCZOS)
+def crear_pdf(titulo, precio, fecha, desc):
+    pdf = FPDF()
+    pdf.add_page()
+    try:
+        res = requests.get("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", timeout=10)
+        with open("temp_logo.png", "wb") as f: f.write(res.content)
+        pdf.image("temp_logo.png", x=75, y=10, w=60)
+    except: pass
+    pdf.ln(35)
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(0, 15, txt=titulo.upper(), ln=True, border='B')
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 16); pdf.cell(0, 10, txt=f"VALOR: USD {formato_precio(precio)}", ln=True)
+    pdf.set_font("Arial", 'I', 9); pdf.cell(0, 7, txt=f"Publicado: {fecha}", ln=True); pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12); pdf.cell(0, 8, txt="Descripción:", ln=True)
+    pdf.set_font("Arial", '', 11); pdf.multi_cell(0, 7, txt=desc)
+    pdf.ln(5)
+    y_q = pdf.get_y()
+    if y_q < 210:
+        qrcode.make("https://www.instagram.com/cortes.inmo/").save("t_qr.png")
+        pdf.image("t_qr.png", x=10, y=y_q, w=30)
+        pdf.set_xy(45, y_q + 12); pdf.set_font("Arial", 'B', 10); pdf.cell(0, 5, txt="ESCANEÁ PARA VER MÁS EN REDES")
+    pdf.set_y(245)
+    pdf.set_font("Arial", 'B', 12); pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
+    redes = [
+        ("https://cdn-icons-png.flaticon.com/512/733/733585.png", "WhatsApp: +54 9 351 308-3986", 255),
+        ("https://cdn-icons-png.flaticon.com/512/174/174855.png", "Instagram: @cortes.inmo", 262),
+        ("https://cdn-icons-png.flaticon.com/512/3046/3046121.png", "TikTok: @cortes.inmobiliaria", 269)
+    ]
+    for url, txt, y in redes:
+        try:
+            r = requests.get(url)
+            with open("temp_ico.png", "wb") as f: f.write(r.content)
+            pdf.image("temp_ico.png", x=10, y=y, w=5)
+        except: pass
+        pdf.set_xy(17, y + 0.5); pdf.set_font("Arial", '', 10); pdf.cell(0, 5, txt=txt, ln=True)
+    return pdf.output(dest='S').encode('latin-1')
+
+def crear_flyer(foto, titulo, precio):
+    img = Image.open(foto).convert("RGB").resize((1080, 1080), Image.Resampling.LANCZOS)
     draw = ImageDraw.Draw(img)
     overlay = Image.new('RGBA', (1080, 1080), (0,0,0,0))
-    draw_ov = ImageDraw.Draw(overlay)
-    draw_ov.rectangle([0, 750, 1080, 1080], fill=(0, 0, 0, 180))
+    ImageDraw.Draw(overlay).rectangle([0, 750, 1080, 1080], fill=(0, 0, 0, 180))
     img.paste(overlay, (0,0), overlay)
     try:
         res = requests.get("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png")
@@ -58,137 +118,20 @@ def crear_flyer(foto_subida, titulo, precio):
     img.save(buf, format="PNG")
     return buf.getvalue()
 
-# --- FUNCIÓN PDF (LOGOS Y REDES BLINDADOS) ---
-def crear_pdf(titulo, precio, fecha, desc):
-    precio_lindo = formato_precio(precio)
-    pdf = FPDF()
-    pdf.add_page()
-    try:
-        url_logo = "https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png"
-        res = requests.get(url_logo, timeout=10)
-        with open("temp_logo.png", "wb") as f: f.write(res.content)
-        pdf.image("temp_logo.png", x=75, y=10, w=60)
-    except: pass
+# --- ESTILOS ---
+st.markdown("<style>div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; width: 100%; border-radius: 10px; font-weight: bold; }</style>", unsafe_allow_html=True)
 
-    pdf.ln(35)
-    pdf.set_font("Arial", 'B', 20)
-    pdf.cell(0, 15, txt=f"{titulo.upper()}", ln=True, border='B', align='L')
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, txt=f"VALOR: USD {precio_lindo}", ln=True)
-    pdf.set_font("Arial", 'I', 9)
-    pdf.cell(0, 7, txt=f"Publicado el: {fecha}", ln=True)
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, txt="Descripción de la propiedad:", ln=True)
-    pdf.set_font("Arial", '', 11)
-    pdf.multi_cell(0, 7, txt=desc)
-    
-    pdf.ln(5)
-    y_qr = pdf.get_y()
-    if y_qr > 210: pdf.add_page(); y_qr = 20
-    try:
-        qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
-        qr.save("temp_qr.png")
-        pdf.image("temp_qr.png", x=10, y=y_qr, w=30)
-        pdf.set_xy(45, y_qr + 12)
-        pdf.set_font("Arial", 'B', 10)
-        pdf.cell(0, 5, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
-    except: pass
-
-    pdf.set_y(245)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
-    
-    redes = [
-        ("https://cdn-icons-png.flaticon.com/512/733/733585.png", "WhatsApp: +54 9 351 308-3986", 255),
-        ("https://cdn-icons-png.flaticon.com/512/174/174855.png", "Instagram: @cortes.inmo", 262),
-        ("https://cdn-icons-png.flaticon.com/512/3046/3046121.png", "TikTok: @cortes.inmobiliaria", 269)
-    ]
-
-    for url, txt, y in redes:
-        try:
-            r = requests.get(url)
-            with open("temp_ico.png", "wb") as f: f.write(r.content)
-            pdf.image("temp_ico.png", x=10, y=y, w=5)
-        except: pass
-        pdf.set_xy(17, y + 0.5)
-        pdf.set_font("Arial", '', 10)
-        pdf.cell(0, 5, txt=txt, ln=True)
-    
-    return pdf.output(dest='S').encode('latin-1')
-
-# --- INTERFAZ ---
-st.markdown("<style>div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; border-radius: 10px; font-weight: bold; }</style>", unsafe_allow_html=True)
-
-df = cargar_datos()
-
-with st.sidebar:
-    st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
-    st.divider()
-    menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
-    st.divider()
-    
-    # Botón de Respaldo Permanente
-    st.subheader("💾 Respaldo de Datos")
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 DESCARGAR BASE DE DATOS", csv, "respaldo_cortes.csv", "text/csv")
-    
-    # Subir respaldo si se borró todo
-    archivo_subido = st.file_uploader("Restaurar desde archivo:", type="csv")
-    if archivo_subido:
-        df_subido = pd.read_csv(archivo_subido)
-        df_subido.to_csv(DB_FILE, index=False)
-        st.success("¡Datos restaurados!")
-        st.rerun()
-
-# --- LÓGICA DE MÓDULOS ---
-if menu == "📂 CARGAR" or st.session_state.edit_id:
-    if st.session_state.edit_id:
-        st.title("📝 Editar Propiedad")
-        f = df[df['ID'] == st.session_state.edit_id].iloc[0]
-        v_t, v_p, v_d, v_l = f['Titulo'], f['Precio'], f['Descripcion'], f['LinkDrive']
-    else:
-        st.title("📂 Nueva Propiedad")
-        v_t, v_p, v_d, v_l = "", "", "", ""
-
-    with st.form("form_inmo"):
-        t = st.text_input("Título", value=v_t)
-        p = st.text_input("Precio USD (Hasta 1.000.000+)", value=str(v_p).split('.')[0] if str(v_p) != "nan" else "")
-        d = st.text_area("Descripción", value=v_d)
-        l = st.text_input("Link de Drive", value=str(v_l) if str(v_l) != "nan" else "")
-        if st.form_submit_button("💾 GUARDAR"):
-            p_c = "".join(filter(str.isdigit, str(p)))
-            if st.session_state.edit_id:
-                df.loc[df['ID'] == st.session_state.edit_id, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_c, d, l]
-                st.session_state.edit_id = None
-            else:
-                nueva = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p_c, d, l]], columns=df.columns)
-                df = pd.concat([df, nueva])
-            df.to_csv(DB_FILE, index=False)
-            st.success("¡Guardado en base de datos!")
-            st.rerun()
-
-elif menu == "🎨 DISEÑADOR FLYER":
-    st.title("🎨 Creador de Flyers")
-    if not df.empty:
-        prop = st.selectbox("Propiedad:", df['Titulo'].tolist())
-        foto = st.file_uploader("Foto de fondo:", type=['jpg', 'png', 'jpeg'])
-        if foto and st.button("✨ GENERAR FLYER"):
-            d_f = df[df['Titulo'] == prop].iloc[0]
-            f_img = crear_flyer(foto, d_f['Titulo'], d_f['Precio'])
-            st.image(f_img); st.download_button("💾 DESCARGAR", f_img, file_name=f"Flyer_{prop}.png")
-    else: st.warning("No hay datos cargados.")
-
-else:
+# --- PORTFOLIO ---
+if menu == "🖼️ PORTFOLIO" and not st.session_state.edit_id:
     st.title("🖼️ Portfolio Personal")
+    if df.empty:
+        st.info("El portfolio está vacío. Si tenés un respaldo, subilo desde la izquierda.")
     for i, row in df.iloc[::-1].iterrows():
         with st.container():
             st.markdown(f'<div style="background:white;padding:20px;border-radius:15px;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)"><h3>🏠 {row["Titulo"]}</h3><h4>USD {formato_precio(row["Precio"])}</h4></div>', unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns([2, 1, 0.5, 0.5])
             with c1:
-                pdf_dat = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                st.download_button("📄 ENVIAR FICHA", pdf_dat, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
+                st.download_button("📄 ENVIAR FICHA", crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion']), file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
             with c2:
                 if "http" in str(row['LinkDrive']): st.link_button("📂 DRIVE", str(row['LinkDrive']))
             with c3:
@@ -198,3 +141,33 @@ else:
                 if st.button("🗑️", key=f"dl_{row['ID']}"):
                     df = df[df['ID'] != row['ID']]
                     df.to_csv(DB_FILE, index=False); st.rerun()
+
+# --- CARGAR / EDITAR ---
+elif menu == "📂 CARGAR" or st.session_state.edit_id:
+    id_e = st.session_state.edit_id
+    f_e = df[df['ID'] == id_e].iloc[0] if id_e else None
+    st.title("📝 Datos de Propiedad")
+    with st.form("f"):
+        t = st.text_input("Título", value=f_e['Titulo'] if f_e is not None else "")
+        p = st.text_input("Precio USD", value=str(f_e['Precio']).split('.')[0] if f_e is not None else "")
+        d = st.text_area("Descripción", value=f_e['Descripcion'] if f_e is not None else "")
+        l = st.text_input("Link Drive", value=str(f_e['LinkDrive']) if f_e is not None else "")
+        if st.form_submit_button("💾 GUARDAR"):
+            p_l = "".join(filter(str.isdigit, str(p)))
+            if id_e: df.loc[df['ID'] == id_e, ['Titulo', 'Precio', 'Descripcion', 'LinkDrive']] = [t, p_l, d, l]
+            else:
+                n = pd.DataFrame([[datetime.now().timestamp(), datetime.now().strftime("%d/%m/%Y"), t, p_l, d, l]], columns=df.columns)
+                df = pd.concat([df, n])
+            df.to_csv(DB_FILE, index=False); st.session_state.edit_id = None; st.rerun()
+
+# --- FLYER ---
+elif menu == "🎨 DISEÑADOR FLYER":
+    st.title("🎨 Creador de Flyers")
+    if not df.empty:
+        p_sel = st.selectbox("Elegí propiedad:", df['Titulo'].tolist())
+        foto = st.file_uploader("Subí foto de fondo:", type=['jpg', 'png', 'jpeg'])
+        if foto and st.button("✨ GENERAR"):
+            dat = df[df['Titulo'] == p_sel].iloc[0]
+            flyer = crear_flyer(foto, dat['Titulo'], dat['Precio'])
+            st.image(flyer); st.download_button("💾 DESCARGAR FLYER", flyer, file_name=f"Flyer_{p_sel}.png")
+    else: st.warning("Cargá datos primero.")

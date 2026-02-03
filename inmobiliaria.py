@@ -4,7 +4,7 @@ from datetime import datetime
 from fpdf import FPDF
 import requests
 import qrcode
-from PIL import Image, ImageDraw
+from PIL import Image
 from io import BytesIO
 import gspread
 from google.oauth2.service_account import Credentials
@@ -31,18 +31,19 @@ def obtener_datos():
 df = obtener_datos()
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
-# --- FUNCIONES DE APOYO ---
-def formato_precio(valor):
+# --- APOYO ---
+def formato_precio(v):
     try:
-        num = "".join(filter(str.isdigit, str(valor)))
+        num = "".join(filter(str.isdigit, str(v)))
         return f"{int(num):,}".replace(",", ".") if num else "0"
-    except: return str(valor)
+    except: return str(v)
 
+# --- CREACIÓN DEL PDF ESTILO MODELO ---
 def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. LOGO PRINCIPAL (Centrado arriba)
+    # 1. Logo Centrado
     try:
         res = requests.get("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", timeout=5)
         pdf.image(BytesIO(res.content), x=75, y=10, w=60)
@@ -51,9 +52,8 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.ln(35)
     pdf.set_font("Arial", 'B', 18)
     pdf.cell(0, 10, txt=str(titulo).upper(), ln=True)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y()) # Línea divisoria
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y()) # Línea modelo
     
-    # 2. INFORMACIÓN PRINCIPAL
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, txt=f"VALOR: USD {formato_precio(precio)}", ln=True)
@@ -66,82 +66,81 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.set_font("Arial", '', 10)
     pdf.multi_cell(0, 6, txt=str(desc))
     
-    # 3. QR Y REDES
-    pdf.ln(5)
+    # 2. QR Redes
+    pdf.ln(10)
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(0, 8, txt="ESCANEÁ PARA VER MÁS EN REDES:", ln=True)
     try:
         qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
-        qr_b = BytesIO(); qr.save(qr_b); qr_b.seek(0)
-        pdf.image(qr_b, x=10, y=pdf.get_y(), w=35)
+        qr_io = BytesIO(); qr.save(qr_io); qr_io.seek(0)
+        pdf.image(qr_io, x=10, y=pdf.get_y()+2, w=35)
     except: pass
     
-    # 4. CONTACTO CON LOGOS (Al final como el modelo)
+    # 3. Pie de página: Contacto con Logos
     pdf.set_y(245)
-    pdf.line(10, 245, 200, 245) # Línea contacto
+    pdf.line(10, 245, 200, 245)
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, txt="CONTACTO:", ln=True)
     
-    iconos = {
-        "ws": "https://img.icons8.com/color/48/whatsapp--v1.png",
-        "ig": "https://img.icons8.com/fluency/48/instagram-new.png",
-        "tk": "https://img.icons8.com/color/48/tiktok--v1.png"
+    iconos_urls = {
+        "ws": "https://cdn-icons-png.flaticon.com/512/3670/3670051.png", # WhatsApp
+        "ig": "https://cdn-icons-png.flaticon.com/512/3955/3955024.png", # Instagram
+        "tk": "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"  # TikTok
     }
     
-    y_pos = pdf.get_y()
-    redes_data = [
+    y_contact = pdf.get_y()
+    redes = [
         ("ws", f"WhatsApp: +54 9 351 308-3986"),
         ("ig", f"Instagram: @cortes.inmo"),
         ("tk", f"TikTok: @cortes.inmobiliaria")
     ]
     
-    for ico, texto in redes_data:
+    for ico, texto in redes:
         try:
-            r = requests.get(iconos[ico], timeout=2)
-            pdf.image(BytesIO(r.content), x=10, y=y_pos+1, w=4)
+            r = requests.get(iconos_urls[ico], timeout=3)
+            pdf.image(BytesIO(r.content), x=10, y=y_contact+1, w=4)
         except: pass
-        pdf.set_xy(16, y_pos)
+        pdf.set_xy(16, y_contact)
         pdf.set_font("Arial", '', 9)
         pdf.cell(0, 6, txt=texto, ln=True)
-        y_pos += 6
+        y_contact += 6
 
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ ---
+# --- INTERFAZ PORTFOLIO ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
     menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
-    if st.button("🔄 Refrescar"): st.rerun()
+    st.success("Conectado a Google Drive ✅")
 
 if menu == "🖼️ PORTFOLIO" and not st.session_state.edit_id:
     st.title("🖼️ Portfolio Personal")
-    st.markdown("<style>div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; font-weight: bold; }</style>", unsafe_allow_html=True)
+    st.markdown("<style>div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
     
-    if df.empty: st.info("Cargá una propiedad para empezar.")
-    else:
-        for i, row in df.iloc[::-1].iterrows():
-            with st.container():
-                st.markdown(f'<div style="background:white;padding:20px;border-radius:15px;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)"><h3>🏠 {row["Titulo"]}</h3><h4>USD {formato_precio(row["Precio"])}</h4></div>', unsafe_allow_html=True)
-                c1, c2, c3, c4 = st.columns([1.5, 1, 0.5, 0.5])
-                with c1:
-                    if st.button(f"📄 GENERAR PDF", key=f"btn_{row['ID']}"):
-                        pdf_data = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                        st.download_button("⬇️ DESCARGAR FICHA", pdf_data, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"dl_{row['ID']}")
-                with c2:
-                    if "http" in str(row['LinkDrive']): st.link_button("📂 DRIVE", str(row['LinkDrive']), use_container_width=True)
-                with c3:
-                    if st.button("📝", key=f"ed_{row['ID']}", use_container_width=True):
-                        st.session_state.edit_id = row['ID']; st.rerun()
-                with c4:
-                    if st.button("🗑️", key=f"br_{row['ID']}", use_container_width=True):
-                        if sheet:
-                            cell = sheet.find(str(row['ID']))
-                            sheet.delete_rows(cell.row)
-                            st.rerun()
+    for i, row in df.iloc[::-1].iterrows():
+        with st.container():
+            st.markdown(f'<div style="background:white;padding:20px;border-radius:15px;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)"><h3>🏠 {row["Titulo"]}</h3><h4>USD {formato_precio(row["Precio"])}</h4></div>', unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns([1.5, 1, 0.5, 0.5])
+            with c1:
+                if st.button(f"📄 GENERAR PDF", key=f"btn_{row['ID']}"):
+                    pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    st.download_button("⬇️ DESCARGAR FICHA", pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"dl_{row['ID']}")
+            with c2:
+                if "http" in str(row['LinkDrive']): st.link_button("📂 DRIVE", str(row['LinkDrive']), use_container_width=True)
+            with c3:
+                if st.button("📝", key=f"ed_{row['ID']}", use_container_width=True):
+                    st.session_state.edit_id = row['ID']; st.rerun()
+            with c4:
+                if st.button("🗑️", key=f"br_{row['ID']}", use_container_width=True):
+                    if sheet:
+                        cell = sheet.find(str(row['ID']))
+                        sheet.delete_rows(cell.row)
+                        st.rerun()
 
+# --- CARGAR / EDITAR ---
 elif menu == "📂 CARGAR" or st.session_state.edit_id:
-    st.title("📝 Gestión")
+    st.title("📝 Gestión de Propiedad")
     id_e = st.session_state.edit_id
     item = df[df['ID'] == id_e].iloc[0] if id_e and not df.empty else None
     with st.form("f"):
@@ -161,5 +160,4 @@ elif menu == "📂 CARGAR" or st.session_state.edit_id:
 
 elif menu == "🎨 DISEÑADOR FLYER":
     st.title("🎨 Creador de Flyers")
-    # Lógica de Flyer aquí...
-    st.info("Subí una foto para empezar a diseñar.")
+    st.info("Función de diseño para redes sociales.")

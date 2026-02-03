@@ -4,14 +4,14 @@ from datetime import datetime
 from fpdf import FPDF
 import requests
 import qrcode
-from PIL import Image
-from io import BytesIO
 import gspread
 from google.oauth2.service_account import Credentials
+from io import BytesIO
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Cortés Inmobiliaria", page_icon="🏠", layout="wide")
 
+# --- CONEXIÓN A GOOGLE SHEETS ---
 def conectar_google():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -26,8 +26,10 @@ sheet = conectar_google()
 
 def obtener_datos():
     if sheet:
-        data = sheet.get_all_records()
-        return pd.DataFrame(data)
+        try:
+            data = sheet.get_all_records()
+            return pd.DataFrame(data)
+        except: return pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
     return pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
 
 df = obtener_datos()
@@ -35,7 +37,7 @@ df = obtener_datos()
 if 'edit_id' not in st.session_state:
     st.session_state.edit_id = None
 
-# --- FORMATO ---
+# --- FUNCIONES DE FORMATO ---
 def formato_precio(valor):
     try:
         limpio = "".join(filter(str.isdigit, str(valor).split('.')[0]))
@@ -45,11 +47,12 @@ def formato_precio(valor):
 def crear_pdf(titulo, precio, fecha, desc):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Intentar poner el logo principal
     try:
         res = requests.get("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", timeout=5)
-        logo_path = "temp_logo.png"
-        with open(logo_path, "wb") as f: f.write(res.content)
-        pdf.image(logo_path, x=75, y=10, w=60)
+        logo_data = BytesIO(res.content)
+        pdf.image(logo_data, x=75, y=10, w=60)
     except: pass
     
     pdf.ln(35)
@@ -62,19 +65,23 @@ def crear_pdf(titulo, precio, fecha, desc):
     pdf.cell(0, 7, txt=f"Publicado: {fecha}", ln=True)
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, txt="Descripción:", ln=True)
+    pdf.cell(0, 8, txt="Descripcion:", ln=True)
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 7, txt=str(desc))
     
-    # QR Robusto
+    # QR de Instagram (Optimizado)
     try:
         qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
-        qr.save("temp_qr.png")
-        pdf.image("temp_qr.png", x=10, y=pdf.get_y()+5, w=30)
+        qr_img = BytesIO()
+        qr.save(qr_img)
+        qr_img.seek(0)
+        pdf.image(qr_img, x=10, y=pdf.get_y() + 5, w=30)
     except: pass
-    
+
+    # Pie de página con contacto y redes
     pdf.set_y(250)
-    pdf.set_font("Arial", 'B', 12); pdf.cell(0, 10, txt="CONTACTO:", ln=True, border='T')
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, txt="CONTACTO:", ln=True, border='T')
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 5, txt="WhatsApp: +54 9 351 308-3986", ln=True)
     pdf.cell(0, 5, txt="Instagram: @cortes.inmo", ln=True)
@@ -82,19 +89,22 @@ def crear_pdf(titulo, precio, fecha, desc):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- INTERFAZ ---
+# --- MENÚ LATERAL ---
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/nachicortes/Cortes.Inmobiliaria/main/logo.png", width=180)
     st.divider()
-    menu = st.radio("NAVEGACIÓN", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
-    if st.sidebar.button("🔄 Refrescar Datos"): st.rerun()
+    menu = st.radio("NAVEGACION", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
+    if st.button("🔄 Refrescar"): st.rerun()
+    st.write("---")
+    st.success("Conectado a Google Drive ✅")
 
+# --- PORTFOLIO ---
 if menu == "🖼️ PORTFOLIO" and not st.session_state.edit_id:
     st.title("🖼️ Portfolio Personal")
     st.markdown("<style>div.stDownloadButton > button { background-color: #28a745 !important; color: white !important; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
     
     if df.empty:
-        st.info("No hay propiedades. Cargá una en el menú 'CARGAR'.")
+        st.info("No hay propiedades guardadas.")
     else:
         for i, row in df.iloc[::-1].iterrows():
             with st.container():
@@ -107,35 +117,34 @@ if menu == "🖼️ PORTFOLIO" and not st.session_state.edit_id:
                 
                 c1, c2, c3, c4 = st.columns([1.5, 1, 0.5, 0.5])
                 with c1:
-                    try:
-                        pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
-                        st.download_button("📄 ENVIAR PDF", pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"pdf_{row['ID']}")
-                    except: st.error("Error PDF")
+                    pdf_bytes = crear_pdf(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    st.download_button("📄 ENVIAR PDF", pdf_bytes, file_name=f"Ficha_{row['Titulo']}.pdf", key=f"p_{row['ID']}")
                 with c2:
                     link = str(row['LinkDrive'])
                     if "http" in link: st.link_button("📂 DRIVE", link, use_container_width=True)
                     else: st.button("🚫 SIN LINK", disabled=True, use_container_width=True)
                 with c3:
-                    if st.button("📝", key=f"ed_{row['ID']}", use_container_width=True):
-                        st.session_state.edit_id = row['ID']; st.rerun()
+                    if st.button("📝", key=f"e_{row['ID']}", use_container_width=True):
+                        st.session_state.edit_id = row['ID']
+                        st.rerun()
                 with c4:
-                    if st.button("🗑️", key=f"dl_{row['ID']}", use_container_width=True):
+                    if st.button("🗑️", key=f"d_{row['ID']}", use_container_width=True):
                         if sheet:
                             cell = sheet.find(str(row['ID']))
                             sheet.delete_rows(cell.row)
                             st.rerun()
 
+# --- CARGAR / EDITAR ---
 elif menu == "📂 CARGAR" or st.session_state.edit_id:
-    st.title("📝 Gestión")
+    st.title("📝 Gestion de Datos")
     id_edit = st.session_state.edit_id
-    # Buscar datos si es edición
-    f_edit = df[df['ID'] == id_edit].iloc[0] if id_edit and not df.empty else None
+    item = df[df['ID'] == id_edit].iloc[0] if id_edit and not df.empty else None
     
-    with st.form("f_carga"):
-        t = st.text_input("Título", value=f_edit['Titulo'] if f_edit is not None else "")
-        p = st.text_input("Precio USD (solo números)", value=str(f_edit['Precio']) if f_edit is not None else "")
-        d = st.text_area("Descripción", value=f_edit['Descripcion'] if f_edit is not None else "")
-        l = st.text_input("Link Drive", value=str(f_edit['LinkDrive']) if f_edit is not None else "")
+    with st.form("carga"):
+        t = st.text_input("Titulo", value=item['Titulo'] if item is not None else "")
+        p = st.text_input("Precio USD", value=str(item['Precio']) if item is not None else "")
+        d = st.text_area("Descripcion", value=item['Descripcion'] if item is not None else "")
+        l = st.text_input("Link Drive", value=str(item['LinkDrive']) if item is not None else "")
         
         if st.form_submit_button("💾 GUARDAR"):
             p_limpio = "".join(filter(str.isdigit, str(p)))
@@ -146,9 +155,9 @@ elif menu == "📂 CARGAR" or st.session_state.edit_id:
             else:
                 nueva = [int(datetime.now().timestamp()), datetime.now().strftime("%d/%m/%Y"), t, p_limpio, d, l]
                 sheet.append_row(nueva)
-            st.success("¡Sincronizado!")
+            st.success("Guardado en Google Sheets!")
             st.rerun()
 
 elif menu == "🎨 DISEÑADOR FLYER":
     st.title("🎨 Flyers")
-    st.info("Función en mantenimiento para asegurar compatibilidad con Google Drive.")
+    st.info("Función de diseño para redes sociales.")

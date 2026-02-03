@@ -1,60 +1,126 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
-import qrcode
-from io import BytesIO
+import pandas as pd
+from datetime import datetime
+from fpdf import FPDF
 import requests
+import qrcode
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+import gspread
+from google.oauth2.service_account import Credentials
 
-# --- NUEVO DISEÑADOR DE FLYERS PROFESIONAL ---
-def generar_flyer_pro(propiedad, fotos, estilo="Moderno"):
-    # Creamos un lienzo blanco de 1080x1350 (Formato Portrait Instagram)
-    canvas = Image.new('RGB', (1080, 1350), color=(255, 255, 255))
+# --- CONFIGURACIÓN BÁSICA ---
+st.set_page_config(page_title="Cortés Inmobiliaria", page_icon="🏠", layout="wide")
+
+def conectar_google():
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds_dict = st.secrets["gcp_service_account"]
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        return gspread.authorize(credentials).open("DB_Cortes_Inmo").sheet1
+    except: return None
+
+sheet = conectar_google()
+
+def obtener_datos():
+    if sheet:
+        try: return pd.DataFrame(sheet.get_all_records())
+        except: return pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
+    return pd.DataFrame(columns=["ID", "Fecha", "Titulo", "Precio", "Descripcion", "LinkDrive"])
+
+df = obtener_datos()
+if 'edit_id' not in st.session_state: st.session_state.edit_id = None
+
+# --- MOTOR DE DISEÑO: FLYER MULTIFOTO ---
+def generar_flyer_premium(propiedad, fotos_subidas):
+    # Lienzo Instagram (1080x1350)
+    canvas = Image.new('RGB', (1080, 1350), color='#FFFFFF')
+    draw = ImageDraw.Draw(canvas)
     
-    # Combinar fotos (Tomamos hasta 3 fotos)
-    posiciones = [(0,0,1080,675), (0,675,540,1000), (540,675,1080,1000)]
-    for i, archivo in enumerate(fotos[:3]):
-        img = Image.open(archivo).convert("RGB")
-        # Redimensionar y recortar para que encaje en su cuadrante
-        ancho, alto = posiciones[i][2]-posiciones[i][0], posiciones[i][3]-posiciones[i][1]
+    # Lógica de cuadrícula para 3 fotos
+    posiciones = [(0, 0, 1080, 600), (0, 600, 535, 950), (545, 600, 1080, 950)]
+    
+    for i, file in enumerate(fotos_subidas[:3]):
+        img = Image.open(file).convert("RGB")
+        ancho = posiciones[i][2] - posiciones[i][0]
+        alto = posiciones[i][3] - posiciones[i][1]
+        # Ajuste inteligente de imagen
         img = img.resize((ancho, alto), Image.Resampling.LANCZOS)
         canvas.paste(img, (posiciones[i][0], posiciones[i][1]))
 
-    draw = ImageDraw.Draw(canvas)
+    # Pie de diseño con redacción comercial
+    draw.rectangle([0, 950, 1080, 1350], fill='#1A1A1A') # Fondo oscuro elegante
     
-    # Capa de diseño (Rectángulo inferior para texto)
-    draw.rectangle([0, 1000, 1080, 1350], fill=(255, 255, 255))
+    # Aquí iría el texto (Mañana cargaremos tipografías personalizadas)
+    titulo_comercial = f"EXCLUSIVO: {propiedad['Titulo'].upper()}"
+    precio_comercial = f"INVERSIÓN: USD {propiedad['Precio']}"
     
-    # Redacción Inteligente (Juego de palabras según precio/título)
-    texto_gancho = f"¡TU PRÓXIMO HOGAR EN {propiedad['Titulo'].upper()}!"
-    draw.text((50, 1050), texto_gancho, fill=(0,0,0))
-    draw.text((50, 1150), f"Oportunidad única: USD {propiedad['Precio']}", fill=(40, 167, 69))
+    # Dibujo de texto básico (provisional hasta cargar fuentes)
+    draw.text((50, 1000), titulo_comercial, fill='#FFFFFF')
+    draw.text((50, 1100), precio_comercial, fill='#28A745')
     
     return canvas
 
-# --- MEJORA PDF: QR GENERADO EN MEMORIA ---
-def obtener_qr_memoria(url):
-    qr = qrcode.QRCode(border=1)
-    qr.add_data(url)
-    qr.make(fit=True)
-    img_qr = qr.make_image(fill_color="black", back_color="white")
-    buf = BytesIO()
-    img_qr.save(buf, format='PNG')
-    buf.seek(0)
-    return buf
+# --- PDF ROBUSTO ---
+def crear_pdf_final(titulo, precio, fecha, desc):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Encabezado con línea estética
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(0, 15, txt=str(titulo).upper(), ln=True)
+    pdf.set_draw_color(40, 167, 69)
+    pdf.line(10, 25, 200, 25)
+    
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 15)
+    pdf.set_text_color(40, 167, 69)
+    pdf.cell(0, 10, txt=f"VALOR: USD {precio}", ln=True)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", '', 11)
+    pdf.multi_cell(0, 7, txt=str(desc))
+    
+    # QR e Iconos (Bloque de seguridad para evitar página en blanco)
+    try:
+        qr = qrcode.make("https://www.instagram.com/cortes.inmo/")
+        qr_b = BytesIO(); qr.save(qr_b); qr_b.seek(0)
+        pdf.image(qr_b, x=160, y=250, w=30)
+    except: pass
+    
+    pdf.set_y(250)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 5, txt="CONTACTO: @cortes.inmo", ln=True)
+    pdf.cell(0, 5, txt="WhatsApp: +54 9 351 308-3986", ln=True)
+    
+    return pdf.output(dest='S').encode('latin-1')
 
-# --- INTEGRACIÓN EN EL MENÚ ---
-if st.session_state.get('menu') == "🎨 DISEÑADOR FLYER":
-    st.title("🎨 Editor de Flyers Multi-foto")
-    p_sel = st.selectbox("Elegí la propiedad", df['Titulo'])
-    datos_p = df[df['Titulo'] == p_sel].iloc[0]
+# --- INTERFAZ STREAMLIT ---
+with st.sidebar:
+    st.title("Cortés Inmo")
+    menu = st.radio("MENÚ", ["🖼️ PORTFOLIO", "🎨 DISEÑADOR FLYER", "📂 CARGAR"])
+
+if menu == "🖼️ PORTFOLIO":
+    st.title("Portfolio de Propiedades")
+    for i, row in df.iloc[::-1].iterrows():
+        with st.expander(f"🏠 {row['Titulo']} - USD {row['Precio']}"):
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"Generar PDF", key=f"pdf_{row['ID']}"):
+                    pdf_v = crear_pdf_final(row['Titulo'], row['Precio'], row['Fecha'], row['Descripcion'])
+                    st.download_button("Descargar", pdf_v, f"{row['Titulo']}.pdf")
+            with col2:
+                if st.button("Borrar", key=f"del_{row['ID']}"):
+                    cell = sheet.find(str(row['ID']))
+                    sheet.delete_rows(cell.row)
+                    st.rerun()
+
+elif menu == "🎨 DISEÑADOR FLYER":
+    st.title("Creador de Flyers Multifoto")
+    p_sel = st.selectbox("Elegí propiedad", df['Titulo'])
+    fotos = st.file_uploader("Subí 3 fotos", accept_multiple_files=True)
     
-    fotos = st.file_uploader("Subí hasta 3 fotos de la propiedad", accept_multiple_files=True)
-    
-    if fotos:
-        if st.button("✨ GENERAR DISEÑO"):
-            flyer_final = generar_flyer_pro(datos_p, fotos)
-            st.image(flyer_final, caption="Diseño generado para Cortés Inmobiliaria")
-            
-            # Botón de descarga del Flyer
-            buf = BytesIO()
-            flyer_final.save(buf, format="JPEG")
-            st.download_button("💾 Descargar Flyer para Redes", buf.getvalue(), "flyer_cortes.jpg")
+    if fotos and st.button("Crear Flyer"):
+        datos = df[df['Titulo'] == p_sel].iloc[0]
+        resultado = generar_flyer_premium(datos, fotos)
+        st.image(resultado)
